@@ -1,0 +1,33 @@
+server:
+  port: ${CEFA_TV_HTTP_PORT:8081}
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: cefa-tv-player
+  mvc:
+    async:
+      request-timeout: -1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+cefa-tv:
+  data-dir: ${CEFA_TV_DATA_DIR:./data}
+  enrollment-key: ${CEFA_TV_ENROLLMENT_KEY:}
+  server: ${CEFA_TV_SERVER:}
+  player-name: ${CEFA_TV_PLAYER_NAME:}
+  discovery-port: ${CEFA_TV_DISCOVERY_PORT:47808}
+  heartbeat-sec: 30
+  chromium:
+    enabled: ${CEFA_TV_CHROMIUM_ENABLED:true}
+    binary: ${CEFA_TV_CHROMIUM_BINARY:chromium}
+    debug-port: ${CEFA_TV_CHROMIUM_DEBUG_PORT:9222}
+    no-sandbox: ${CEFA_TV_CHROMIUM_NO_SANDBOX:true}
+
+info:
+  app:
+    version: "@project.version@"

@@ -1,0 +1,21 @@
+services:
+  player:
+    image: ${CEFA_TV_IMAGE:-cefa-tv-player:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cefa-tv-player
+    restart: unless-stopped
+    network_mode: host
+    shm_size: 1gb
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - CEFA_TV_DATA_DIR=/data
+      - DISPLAY_MODE=${DISPLAY_MODE:-headless}
+    volumes:
+      - cefa-tv-player-data:/data
+
+volumes:
+  cefa-tv-player-data:

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>CEFA TV Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 32px; }
+      h1 { font-size: 20px; letter-spacing: 0.1em; }
+      table { border-collapse: collapse; margin-top: 16px; }
+      td { padding: 6px 16px 6px 0; border-bottom: 1px solid #1e293b; }
+      td:first-child { color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <h1>CEFA TV Player</h1>
+    <table id="status"></table>
+    <script>
+      function render(data) {
+        var table = document.getElementById('status')
+        table.innerHTML = ''
+        Object.keys(data).forEach(function (key) {
+          var row = table.insertRow()
+          row.insertCell().textContent = key
+          row.insertCell().textContent = data[key] === null ? '' : String(data[key])
+        })
+      }
+      function refresh() {
+        fetch('/status.json').then(function (r) { return r.json() }).then(render).catch(function () {})
+      }
+      refresh()
+      setInterval(refresh, 3000)
+    </script>
+  </body>
+</html>
