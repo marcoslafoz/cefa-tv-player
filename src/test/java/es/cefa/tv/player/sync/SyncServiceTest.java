@@ -44,7 +44,8 @@ class SyncServiceTest {
   void setUp() throws Exception {
     new Random(7).nextBytes(large);
     mapper = new ObjectMapper().findAndRegisterModules();
-    PlayerProperties properties = new PlayerProperties(dir, "", "", "", 47808, 30, null);
+    PlayerProperties properties =
+        new PlayerProperties(dir, "", "", "", 47808, 30, null, "headless", null);
     files = new FileStore(properties);
     manifests = new ManifestStore(properties, mapper);
     status = new PlayerStatus();

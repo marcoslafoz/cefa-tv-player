@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class RemoteService {
   private static final double FRAMES_PER_SECOND_SOURCE = 60.0;
   private static final long RESTART_DELAY_SECONDS = 2;
   private static final long VIEWPORT_TTL_MS = 2000;
+  private static final long IDLE_FRAME_MS = 2000;
 
   private final CdpClient cdp;
   private final PlayerProperties properties;
@@ -43,6 +45,8 @@ public class RemoteService {
   private volatile double viewportWidth = 1920;
   private volatile double viewportHeight = 1080;
   private volatile long viewportCheckedAt;
+  private volatile long lastFrameAt;
+  private ScheduledFuture<?> idleFrames;
 
   /**
    * Crea el servicio y se suscribe a los eventos de DevTools.
@@ -80,6 +84,12 @@ public class RemoteService {
     this.maxWidth = Math.max(320, maxWidth);
     this.active = true;
     startScreencast();
+    if (idleFrames != null) {
+      idleFrames.cancel(false);
+    }
+    idleFrames =
+        scheduler.scheduleWithFixedDelay(
+            this::sendIdleFrame, IDLE_FRAME_MS, IDLE_FRAME_MS, TimeUnit.MILLISECONDS);
   }
 
   /** Detiene la retransmisión. */
@@ -88,6 +98,10 @@ public class RemoteService {
       return;
     }
     active = false;
+    if (idleFrames != null) {
+      idleFrames.cancel(false);
+      idleFrames = null;
+    }
     if (properties.chromium().enabled()) {
       try {
         cdp.call("Page.stopScreencast", null);
@@ -159,6 +173,27 @@ public class RemoteService {
     }
   }
 
+  private void sendIdleFrame() {
+    if (!active || !properties.chromium().enabled()) {
+      return;
+    }
+    if (System.currentTimeMillis() - lastFrameAt < IDLE_FRAME_MS) {
+      return;
+    }
+    try {
+      var params = cdp.params();
+      params.put("format", "jpeg");
+      params.put("quality", quality);
+      String data = cdp.call("Page.captureScreenshot", params).path("data").asText("");
+      if (!data.isEmpty()) {
+        lastFrameAt = System.currentTimeMillis();
+        frameSink.test(Base64.getDecoder().decode(data));
+      }
+    } catch (IOException e) {
+      log.debug("No se pudo capturar el fotograma en reposo: {}", e.getMessage());
+    }
+  }
+
   private void scheduleRestart() {
     scheduler.schedule(
         () -> {
@@ -190,6 +225,7 @@ public class RemoteService {
           }
         });
     if (active) {
+      lastFrameAt = System.currentTimeMillis();
       frameSink.test(Base64.getDecoder().decode(params.path("data").asText("")));
     }
   }

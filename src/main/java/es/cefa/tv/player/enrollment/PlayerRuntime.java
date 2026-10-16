@@ -2,6 +2,7 @@ package es.cefa.tv.player.enrollment;
 
 import com.sun.management.OperatingSystemMXBean;
 import es.cefa.tv.player.discovery.DiscoveryClient;
+import es.cefa.tv.player.display.DisplayService;
 import es.cefa.tv.player.shared.config.PlayerProperties;
 import es.cefa.tv.player.status.PlayerStatus;
 import es.cefa.tv.player.sync.HeartbeatService;
@@ -46,6 +47,7 @@ public class PlayerRuntime {
   private final SyncService sync;
   private final HeartbeatService heartbeat;
   private final PlayerSocket socket;
+  private final DisplayService display;
   private final String version;
 
   /**
@@ -59,6 +61,7 @@ public class PlayerRuntime {
    * @param sync sincronización
    * @param heartbeat latidos
    * @param socket WebSocket con el servidor
+   * @param display pantallas detectadas
    * @param version versión del reproductor
    */
   public PlayerRuntime(
@@ -70,6 +73,7 @@ public class PlayerRuntime {
       SyncService sync,
       HeartbeatService heartbeat,
       PlayerSocket socket,
+      DisplayService display,
       @Value("${info.app.version:dev}") String version) {
     this.properties = properties;
     this.stateStore = stateStore;
@@ -79,6 +83,7 @@ public class PlayerRuntime {
     this.sync = sync;
     this.heartbeat = heartbeat;
     this.socket = socket;
+    this.display = display;
     this.version = version;
   }
 
@@ -178,7 +183,11 @@ public class PlayerRuntime {
         ZoneId.systemDefault().getId());
   }
 
-  private static String resolution() {
+  private String resolution() {
+    String detected = display.selectedResolution().orElse(null);
+    if (detected != null) {
+      return detected;
+    }
     String value = System.getenv("CEFA_TV_RESOLUTION");
     if (value == null || value.isBlank()) {
       return "unknown";

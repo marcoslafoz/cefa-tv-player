@@ -6,6 +6,8 @@ import es.cefa.tv.player.storage.FileStore;
 import es.cefa.tv.player.storage.ManifestStore;
 import es.cefa.tv.player.sync.dto.HeartbeatRequest;
 import es.cefa.tv.player.sync.dto.HeartbeatResponse;
+import es.cefa.tv.player.telemetry.Telemetry;
+import es.cefa.tv.player.telemetry.TelemetryService;
 import jakarta.annotation.PreDestroy;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -27,6 +29,7 @@ public class HeartbeatService {
   private final PlayerStatus status;
   private final SyncService sync;
   private final PlayerCommands commands;
+  private final TelemetryService telemetry;
   private final ScheduledExecutorService scheduler =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
@@ -45,6 +48,7 @@ public class HeartbeatService {
    * @param status estado compartido
    * @param sync servicio de sincronización
    * @param commands ejecutor de órdenes
+   * @param telemetry telemetría del equipo y las pantallas
    */
   public HeartbeatService(
       ServerApi api,
@@ -52,13 +56,15 @@ public class HeartbeatService {
       FileStore files,
       PlayerStatus status,
       SyncService sync,
-      PlayerCommands commands) {
+      PlayerCommands commands,
+      TelemetryService telemetry) {
     this.api = api;
     this.manifests = manifests;
     this.files = files;
     this.status = status;
     this.sync = sync;
     this.commands = commands;
+    this.telemetry = telemetry;
   }
 
   /**
@@ -82,6 +88,7 @@ public class HeartbeatService {
 
   /** Envía un latido y procesa la respuesta; los errores de red solo marcan el estado. */
   public void beat() {
+    Telemetry sample = telemetry.snapshot();
     HeartbeatRequest request =
         new HeartbeatRequest(
             manifests.appliedVersion(),
@@ -92,12 +99,22 @@ public class HeartbeatService {
             files.freeMegabytes(),
             status.uptimeSec(),
             localIp(),
-            status.lastError());
+            status.lastError(),
+            sample.system(),
+            sample.displays());
     try {
       HeartbeatResponse response = api.heartbeat(request);
       status.connected(true);
       sync.onDesiredVersion(response.desiredVersion());
-      response.commandsOrEmpty().forEach(command -> commands.execute(command.type()));
+      response
+          .commandsOrEmpty()
+          .forEach(
+              command ->
+                  commands.execute(
+                      command.type(),
+                      command.output(),
+                      command.width() == null ? 0 : command.width(),
+                      command.height() == null ? 0 : command.height()));
     } catch (ServerException e) {
       status.connected(true);
       log.warn("Latido rechazado: {}", e.getMessage());

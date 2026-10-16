@@ -15,6 +15,10 @@ wait_for_display() {
   return 1
 }
 
+enable_connected_outputs() {
+  xrandr --auto >/dev/null 2>&1 || true
+}
+
 case "$MODE" in
   host)
     export DISPLAY="${DISPLAY:-:0}"
@@ -29,12 +33,13 @@ case "$MODE" in
     rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
     Xorg :0 vt1 -nolisten tcp -noreset -novtswitch -keeptty &
     wait_for_display
+    enable_connected_outputs
     openbox >/dev/null 2>&1 &
     ;;
   headless)
     export DISPLAY=:99
     rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
-    Xvfb :99 -screen 0 "$RESOLUTION" -nolisten tcp &
+    Xvfb :99 -screen 0 "$RESOLUTION" -nolisten tcp +extension RANDR &
     wait_for_display
     openbox >/dev/null 2>&1 &
     ;;

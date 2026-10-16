@@ -43,7 +43,8 @@ class DiscoveryClientTest {
     udp = new DatagramSocket(0, InetAddress.getByName("127.0.0.1"));
     client =
         new DiscoveryClient(
-            new PlayerProperties(Path.of("."), "", "", "", 0, 30, null), new ObjectMapper());
+            new PlayerProperties(Path.of("."), "", "", "", 0, 30, null, "headless", null),
+            new ObjectMapper());
   }
 
   @AfterEach

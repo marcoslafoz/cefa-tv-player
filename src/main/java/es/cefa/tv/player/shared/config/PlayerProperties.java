@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param discoveryPort puerto UDP del sidecar de descubrimiento
  * @param heartbeatSec segundos entre latidos HTTP
  * @param chromium configuración del navegador
+ * @param displayMode modo de pantalla del contenedor (host, xorg o headless)
+ * @param shell configuración de la terminal remota
  */
 @ConfigurationProperties(prefix = "cefa-tv")
 public record PlayerProperties(
@@ -22,7 +24,9 @@ public record PlayerProperties(
     String playerName,
     int discoveryPort,
     int heartbeatSec,
-    Chromium chromium) {
+    Chromium chromium,
+    String displayMode,
+    Shell shell) {
 
   /**
    * Configuración de Chromium.
@@ -33,6 +37,24 @@ public record PlayerProperties(
    * @param noSandbox desactiva el sandbox (necesario al ejecutarse como root en contenedor)
    */
   public record Chromium(boolean enabled, String binary, int debugPort, boolean noSandbox) {}
+
+  /**
+   * Configuración de la terminal remota.
+   *
+   * @param enabled si se aceptan sesiones de terminal del servidor
+   * @param mode {@code container} para la shell del contenedor o {@code host} para la del anfitrión
+   */
+  public record Shell(boolean enabled, String mode) {
+
+    /**
+     * Indica si la shell debe ejecutarse en el anfitrión.
+     *
+     * @return {@code true} cuando el modo es {@code host}
+     */
+    public boolean hostMode() {
+      return "host".equalsIgnoreCase(mode);
+    }
+  }
 
   /**
    * Indica si hay una clave de alta configurada.

@@ -35,6 +35,13 @@ RUN apt-get update \
       tzdata \
       ca-certificates \
       curl \
+      bash \
+      iproute2 \
+      procps \
+      util-linux \
+      iputils-ping \
+      nano \
+      less \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -44,6 +51,10 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
 
 ENV CEFA_TV_DATA_DIR=/data
 ENV DISPLAY_MODE=headless
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV CEFA_TV_SHELL_ENABLED=true
+ENV CEFA_TV_SHELL_MODE=container
 ENV CEFA_TV_RESOLUTION=1920x1080x24
 ENV JAVA_OPTS="-Xmx512m"
 VOLUME /data

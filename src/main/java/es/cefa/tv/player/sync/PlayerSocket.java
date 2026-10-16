@@ -12,9 +12,11 @@ import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -38,6 +40,7 @@ public class PlayerSocket {
   private final ManifestStore manifests;
   private final HttpClient http = HttpClient.newHttpClient();
   private volatile Consumer<JsonNode> handler = message -> {};
+  private final List<Runnable> disconnectListeners = new CopyOnWriteArrayList<>();
   private volatile boolean running;
   private volatile WebSocket socket;
   private CompletableFuture<?> tail = CompletableFuture.completedFuture(null);
@@ -61,6 +64,15 @@ public class PlayerSocket {
    */
   public void onMessage(Consumer<JsonNode> handler) {
     this.handler = handler;
+  }
+
+  /**
+   * Registra qué se ejecuta cuando se pierde la conexión con el servidor.
+   *
+   * @param listener acción a ejecutar en cada desconexión
+   */
+  public void onDisconnect(Runnable listener) {
+    disconnectListeners.add(listener);
   }
 
   /**
@@ -165,6 +177,7 @@ public class PlayerSocket {
         log.info("WebSocket con el servidor abierto");
         sendText(Map.of("type", "HELLO", "appliedVersion", manifests.appliedVersion()));
         closed.get();
+        disconnectListeners.forEach(Runnable::run);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         return;

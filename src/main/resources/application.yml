@@ -27,6 +27,10 @@ cefa-tv:
     binary: ${CEFA_TV_CHROMIUM_BINARY:chromium}
     debug-port: ${CEFA_TV_CHROMIUM_DEBUG_PORT:9222}
     no-sandbox: ${CEFA_TV_CHROMIUM_NO_SANDBOX:true}
+  display-mode: ${DISPLAY_MODE:headless}
+  shell:
+    enabled: ${CEFA_TV_SHELL_ENABLED:true}
+    mode: ${CEFA_TV_SHELL_MODE:container}
 
 info:
   app:

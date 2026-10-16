@@ -11,6 +11,9 @@ SERVER=""
 PLAYER_NAME=""
 MODE=""
 IMAGE=""
+SHELL_ENABLED=""
+SHELL_MODE=""
+HOST_SHELL_REQUESTED=0
 ASSUME_YES=0
 UNINSTALL=0
 
@@ -25,6 +28,8 @@ Uso: sudo ./install.sh [opciones]
   --name NOMBRE      Nombre solicitado para la pantalla (por defecto, el hostname)
   --mode MODO        host (usa el servidor X del equipo), xorg (pantalla dedicada) o headless (pruebas)
   --image IMAGEN     Usa una imagen de un registro en lugar de construirla desde este repositorio
+  --host-shell       La terminal remota abre la shell del equipo y no la del contenedor (contenedor privilegiado)
+  --no-shell         Desactiva la terminal remota
   --dir RUTA         Directorio de instalacion (por defecto $INSTALL_DIR)
   --yes              No pregunta confirmaciones (instala Docker si falta)
   --uninstall        Desinstala el reproductor
@@ -52,6 +57,8 @@ parse_args() {
       --name) PLAYER_NAME="${2:?Falta el valor de --name}"; shift 2 ;;
       --mode) MODE="${2:?Falta el valor de --mode}"; shift 2 ;;
       --image) IMAGE="${2:?Falta el valor de --image}"; shift 2 ;;
+      --host-shell) SHELL_MODE="host"; HOST_SHELL_REQUESTED=1; shift ;;
+      --no-shell) SHELL_ENABLED="false"; shift ;;
       --dir) INSTALL_DIR="${2:?Falta el valor de --dir}"; shift 2 ;;
       --yes|-y) ASSUME_YES=1; shift ;;
       --uninstall) UNINSTALL=1; shift ;;
@@ -99,6 +106,8 @@ read_existing_env() {
   [ -n "$SERVER" ] || SERVER="$(sed -n 's/^CEFA_TV_SERVER=//p' "$file" | head -1)"
   [ -n "$PLAYER_NAME" ] || PLAYER_NAME="$(sed -n 's/^CEFA_TV_PLAYER_NAME=//p' "$file" | head -1)"
   [ -n "$MODE" ] || MODE="$(sed -n 's/^DISPLAY_MODE=//p' "$file" | head -1)"
+  [ -n "$SHELL_ENABLED" ] || SHELL_ENABLED="$(sed -n 's/^CEFA_TV_SHELL_ENABLED=//p' "$file" | head -1)"
+  [ -n "$SHELL_MODE" ] || SHELL_MODE="$(sed -n 's/^CEFA_TV_SHELL_MODE=//p' "$file" | head -1)"
 }
 
 ask_key() {
@@ -118,6 +127,25 @@ detect_mode() {
     MODE="xorg"
   fi
   log "Modo de pantalla detectado: $MODE"
+}
+
+validate_shell() {
+  [ -n "$SHELL_ENABLED" ] || SHELL_ENABLED="true"
+  [ -n "$SHELL_MODE" ] || SHELL_MODE="container"
+  case "$SHELL_ENABLED" in true|false) ;; *) fail "CEFA_TV_SHELL_ENABLED no es valido: $SHELL_ENABLED" ;; esac
+  case "$SHELL_MODE" in container|host) ;; *) fail "CEFA_TV_SHELL_MODE no es valido: $SHELL_MODE" ;; esac
+  if [ "$SHELL_ENABLED" = "false" ] && [ "$HOST_SHELL_REQUESTED" -eq 1 ]; then
+    fail "--host-shell y --no-shell son incompatibles"
+  fi
+  if [ "$SHELL_ENABLED" = "false" ]; then
+    SHELL_MODE="container"
+  fi
+  if [ "$SHELL_MODE" = "host" ] && [ "$HOST_SHELL_REQUESTED" -eq 1 ]; then
+    log "ADVERTENCIA: con --host-shell cualquier administrador de CEFA TV Server con rol ADMIN obtendra una terminal"
+    log "de root en este equipo (no solo en el contenedor) y el contenedor se ejecutara en modo privilegiado con"
+    log "el espacio de procesos del equipo. Usalo solo si es imprescindible."
+    confirm "Activar la terminal remota en el equipo anfitrion?" || fail "Instalacion cancelada"
+  fi
 }
 
 validate_mode() {
@@ -164,6 +192,8 @@ CEFA_TV_SERVER=$SERVER
 CEFA_TV_PLAYER_NAME=$PLAYER_NAME
 DISPLAY_MODE=$MODE
 CEFA_TV_IMAGE=${IMAGE:-$LOCAL_IMAGE}
+CEFA_TV_SHELL_ENABLED=$SHELL_ENABLED
+CEFA_TV_SHELL_MODE=$SHELL_MODE
 ENV
   chmod 600 "$INSTALL_DIR/.env"
 }
@@ -214,6 +244,10 @@ YAML
         echo "      - cefa-tv-player-data:/data"
         ;;
     esac
+    if [ "$SHELL_MODE" = "host" ]; then
+      echo "    pid: host"
+      [ "$MODE" = "xorg" ] || echo "    privileged: true"
+    fi
     cat <<YAML
 
 volumes:
@@ -280,6 +314,7 @@ main() {
   ask_key
   detect_mode
   validate_mode
+  validate_shell
   [ "$MODE" != "host" ] || allow_x_access
   prepare_image
   write_env

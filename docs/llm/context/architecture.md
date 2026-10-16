@@ -160,3 +160,60 @@ Reproducción: un motor Java evalúa el manifest con el reloj local, elige la pl
 Variables: `CEFA_TV_ENROLLMENT_KEY`, `CEFA_TV_SERVER` (opcional), `CEFA_TV_PLAYER_NAME` (opcional), `DISPLAY_MODE` (`host`, `xorg`, `headless`).
 
 Modos de pantalla del contenedor: `host` usa el servidor X del anfitrión (monta `/tmp/.X11-unix`), `xorg` arranca su propio Xorg a pantalla completa (contenedor privilegiado, equipos dedicados) y `headless` usa Xvfb (pruebas y control remoto sin pantalla física).
+
+## Pantalla, telemetría y terminal remota
+
+### Pantalla del reproductor
+
+- El reproductor detecta las salidas de vídeo con `xrandr --query` (modo `host` y `xorg`) y elige la primera salida conectada (la marcada como primaria si la hay; si no, la primera por orden de `xrandr`). Fuerza su modo preferido (`xrandr --output X --auto`) para adaptar la resolución al monitor y coloca Chromium en kiosco exactamente sobre esa salida (`--window-position`, `--window-size`). El resto de salidas no se tocan.
+- Cada 10 s comprueba si cambió la salida elegida (monitor desenchufado, enchufado, otra resolución). Si cambia, vuelve a elegir, ajusta la resolución, recoloca Chromium y avisa al servidor. En `headless` informa de la pantalla virtual de Xvfb.
+- Órdenes nuevas del servidor (en `commands` del heartbeat y por WS): `DISPLAY_REDETECT` y `SET_RESOLUTION {output, width, height}`. Si el modo pedido no existe en la salida, el reproductor lo rechaza y lo informa en `lastError`.
+
+### Telemetría
+
+El reproductor envía `system` y `displays` en cada heartbeat y, mientras tenga el WebSocket abierto, en un mensaje `TELEMETRY {system, displays}` cada 15 s:
+
+```json
+{
+  "system": {
+    "hostname": "pantalla-recepcion", "os": "Debian 12", "kernel": "6.1.0", "arch": "x86_64",
+    "cpuModel": "Intel N100", "cpuCount": 4, "cpuPercent": 12.5, "load1": 0.4,
+    "ramTotalMb": 7934, "ramUsedMb": 1900, "diskTotalMb": 237000, "diskFreeMb": 200000,
+    "tempC": 48.0, "uptimeSec": 123456, "ips": ["192.168.1.50"], "macs": ["aa:bb:cc:dd:ee:ff"],
+    "playerVersion": "0.1.0", "javaVersion": "21.0.5", "chromiumVersion": "130.0", "timezone": "Europe/Madrid",
+    "displayMode": "host", "shellEnabled": true, "shellMode": "container"
+  },
+  "displays": [
+    { "output": "HDMI-1", "connected": true, "primary": true, "selected": true, "width": 1920, "height": 1080,
+      "refreshHz": 60.0, "xOffset": 0, "yOffset": 0, "modes": ["1920x1080", "1280x720"] }
+  ]
+}
+```
+
+Los campos que el equipo no pueda calcular (p. ej. `tempC` en un contenedor sin sensores) van a `null`. El servidor guarda lo último en `players.system_info` y `players.displays` (jsonb) y una muestra por heartbeat en `player_metrics(player_id, at, cpu_percent, ram_used_mb, disk_free_mb, temp_c)`, de la que borra lo que tenga más de 24 h. El `resolution` del reproductor pasa a ser la de la salida elegida.
+
+API de administración nueva:
+
+| Método y ruta | Descripción |
+|---|---|
+| `GET /players/{id}` | Añade `system` y `displays`. |
+| `GET /players/{id}/metrics?hours=` | Serie `[{at, cpuPercent, ramUsedMb, diskFreeMb, tempC}]` (máximo 24 h). |
+| `POST /players/{id}/display/redetect` | Encola `DISPLAY_REDETECT`. |
+| `POST /players/{id}/display/resolution` `{output,width,height}` | Encola `SET_RESOLUTION`. |
+
+### Terminal remota
+
+Una terminal interactiva en el reproductor, sin abrir puertos ni instalar un demonio SSH: el reproductor ya mantiene un WebSocket saliente y por él viaja una sesión de shell con pseudoterminal (PTY). Solo el rol `ADMIN` puede abrirla.
+
+- Navegador: `/ws/shell/{playerId}` (cookie de sesión, solo `ADMIN`). Mensajes JSON del navegador al servidor: `OPEN {cols, rows}`, `INPUT {data}`, `RESIZE {cols, rows}`, `CLOSE`. Del servidor al navegador: `OPENED`, `OUTPUT {data}`, `EXIT {code}`, `ERROR {message}`. `data` es texto UTF-8.
+- Servidor a reproductor (por `/ws/player`): `SHELL_OPEN {sessionId, cols, rows}`, `SHELL_INPUT {sessionId, data}`, `SHELL_RESIZE {sessionId, cols, rows}`, `SHELL_CLOSE {sessionId}`. Reproductor a servidor: `SHELL_OUTPUT {sessionId, data}` y `SHELL_EXIT {sessionId, code}`. El servidor genera el `sessionId`.
+- Una sola sesión activa por reproductor. Cierre automático tras 15 min sin entrada o 2 h de duración.
+- Auditoría en la tabla `shell_audits(id, player_id, user_id, username, opened_at, closed_at, bytes_in, bytes_out, close_reason)` y consulta con `GET /players/{id}/shell-audits`. No se guarda el contenido de la sesión.
+- Reproductor: `CEFA_TV_SHELL_ENABLED` (por defecto `true`) y `CEFA_TV_SHELL_MODE` (`container` por defecto: shell dentro del contenedor; `host`: shell del anfitrión con `nsenter -t 1 -m -u -n -i`, exige `pid: host` y modo privilegiado, que el instalador solo configura con `--host-shell`). Si `CEFA_TV_SHELL_ENABLED=false`, rechaza `SHELL_OPEN` y lo informa en `system.shellEnabled`.
+
+### Estado real de varias decisiones (cambios respecto al texto anterior)
+
+- `fallbackPlaylistId` se define por reproductor y por grupo (`players.fallback_playlist_id`, `player_groups.fallback_playlist_id`); el del reproductor manda. `PATCH /players/{id}` admite `clearGroup` y `clearFallbackPlaylist`.
+- Un reproductor dado de baja desconectado recibe 401 `INVALID_DEVICE_TOKEN` en su siguiente llamada; uno desactivado, 403 `PLAYER_DISABLED`. El reproductor trata el 401 como baja: borra su estado y se reinicia.
+- El zip de `POST /player-api/files` usa DEFLATED con nivel 0 para formatos ya comprimidos.
+- `resolution` en el alta acepta `1920x1080` o `{width,height}`.

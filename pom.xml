@@ -20,6 +20,7 @@
   <properties>
     <java.version>21</java.version>
     <lombok.version>1.18.36</lombok.version>
+    <pty4j.version>0.13.10</pty4j.version>
   </properties>
 
   <dependencies>
@@ -30,6 +31,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.pty4j</groupId>
+      <artifactId>pty4j</artifactId>
+      <version>${pty4j.version}</version>
     </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>

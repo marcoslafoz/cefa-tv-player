@@ -1,5 +1,9 @@
 package es.cefa.tv.player.sync.dto;
 
+import es.cefa.tv.player.display.DisplayOutput;
+import es.cefa.tv.player.telemetry.SystemInfo;
+import java.util.List;
+
 /**
  * Latido enviado al servidor.
  *
@@ -12,6 +16,8 @@ package es.cefa.tv.player.sync.dto;
  * @param uptimeSec segundos desde el arranque
  * @param ip dirección IP local
  * @param error último error
+ * @param system datos del equipo
+ * @param displays pantallas detectadas
  */
 public record HeartbeatRequest(
     long appliedVersion,
@@ -22,4 +28,6 @@ public record HeartbeatRequest(
     long diskFreeMb,
     long uptimeSec,
     String ip,
-    String error) {}
+    String error,
+    SystemInfo system,
+    List<DisplayOutput> displays) {}
