@@ -133,6 +133,26 @@ public class PlayerSocket {
   }
 
   /**
+   * Envía un mensaje JSON solo si el canal está libre.
+   *
+   * @param message objeto a serializar
+   * @return {@code false} si se descarta por estar ocupado, desconectado o no serializable
+   */
+  public synchronized boolean trySendText(Object message) {
+    WebSocket current = socket;
+    if (current == null || !tail.isDone()) {
+      return false;
+    }
+    try {
+      tail = current.sendText(mapper.writeValueAsString(message), true);
+      return true;
+    } catch (IOException e) {
+      log.warn("Mensaje no serializable: {}", e.getMessage());
+      return false;
+    }
+  }
+
+  /**
    * Envía un fotograma binario si el canal está libre.
    *
    * @param data bytes del JPEG

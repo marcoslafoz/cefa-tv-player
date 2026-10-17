@@ -1,13 +1,92 @@
 (function () {
   var layers = [document.getElementById('layer-a'), document.getElementById('layer-b')]
-  var idle = document.getElementById('idle')
-  var idleMessage = document.getElementById('idle-message')
+  var screen = document.getElementById('screen')
+  var pairingCode = document.getElementById('pairing-code')
+  var pairingServer = document.getElementById('pairing-server')
+  var statusTitle = document.getElementById('status-title')
+  var statusDetail = document.getElementById('status-detail')
+  var statusRetry = document.getElementById('status-retry')
+  var logoImage = document.getElementById('logo')
+  var logos = {
+    CEFA: { src: '/brand/cefa-logo-white.svg', alt: 'CEFA' },
+    ALGONTEC: { src: '/brand/algontec-logo-white.svg', alt: 'Algontec' }
+  }
+  var idleLogo = 'CEFA'
+  Object.keys(logos).forEach(function (key) {
+    new Image().src = logos[key].src
+  })
   var current = -1
   var lastSeq = 0
+  var retryAt = null
+  var retryTimer = null
 
-  function showIdle(message) {
-    idleMessage.textContent = message || ''
-    idle.classList.add('visible')
+  function hostOf(url) {
+    try {
+      return new URL(url).host
+    } catch (e) {
+      return url || ''
+    }
+  }
+
+  function renderRetry() {
+    if (!retryAt) {
+      statusRetry.textContent = ''
+      return
+    }
+    var seconds = Math.max(0, Math.round((retryAt - Date.now()) / 1000))
+    statusRetry.textContent = 'Próximo intento en ' + seconds + ' s'
+  }
+
+  function startRetryTimer(value) {
+    retryAt = value || null
+    if (retryTimer) {
+      clearInterval(retryTimer)
+      retryTimer = null
+    }
+    renderRetry()
+    if (retryAt) {
+      retryTimer = setInterval(renderRetry, 1000)
+    }
+  }
+
+  function normalizeLogo(name) {
+    var key = String(name || '').toUpperCase()
+    return logos[key] ? key : 'CEFA'
+  }
+
+  function renderLogo(kind) {
+    var logo = logos[kind === 'LOGO' ? idleLogo : 'CEFA']
+    if (logoImage.getAttribute('src') !== logo.src) {
+      logoImage.setAttribute('src', logo.src)
+      logoImage.setAttribute('alt', logo.alt)
+    }
+  }
+
+  function showScreen(event) {
+    var kind = event.screen || 'LOGO'
+    if (event.logo) {
+      idleLogo = normalizeLogo(event.logo)
+    }
+    screen.setAttribute('data-screen', kind)
+    renderLogo(kind)
+    if (kind === 'PAIRING') {
+      pairingCode.textContent = event.code || '------'
+      pairingServer.textContent = event.server ? 'Servidor: ' + hostOf(event.server) : ''
+      startRetryTimer(null)
+    } else if (kind === 'SEARCHING') {
+      statusTitle.textContent = 'Buscando el servidor de CEFA TV'
+      statusDetail.textContent = event.error || event.message || ''
+      startRetryTimer(event.retryAt)
+    } else if (kind === 'CONNECTING') {
+      statusTitle.textContent = 'Conectando con el servidor'
+      statusDetail.textContent = [event.server ? hostOf(event.server) : '', event.error || '']
+        .filter(Boolean)
+        .join(' · ')
+      startRetryTimer(event.retryAt)
+    } else {
+      startRetryTimer(null)
+    }
+    screen.classList.add('visible')
     layers.forEach(function (layer) {
       layer.classList.remove('active')
       layer.innerHTML = ''
@@ -16,7 +95,7 @@
   }
 
   function swapTo(index, previous) {
-    idle.classList.remove('visible')
+    screen.classList.remove('visible')
     layers[index].classList.add('active')
     if (previous >= 0 && previous !== index) {
       var old = layers[previous]
@@ -68,8 +147,11 @@
     if (event.type === 'SHOW') {
       lastSeq = event.seq
       show(event)
-    } else if (event.type === 'IDLE') {
-      showIdle(event.message)
+    } else if (event.type === 'SCREEN') {
+      showScreen(event)
+    } else if (event.type === 'CONFIG') {
+      idleLogo = normalizeLogo(event.idleLogo)
+      renderLogo(screen.getAttribute('data-screen'))
     }
   }
 

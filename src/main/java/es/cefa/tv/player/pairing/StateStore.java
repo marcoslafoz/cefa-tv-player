@@ -1,5 +1,6 @@
-package es.cefa.tv.player.enrollment;
+package es.cefa.tv.player.pairing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import es.cefa.tv.player.shared.config.PlayerProperties;
 import es.cefa.tv.player.storage.AtomicFiles;
@@ -7,6 +8,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -39,6 +41,9 @@ public class StateStore {
     }
     try {
       return Optional.of(mapper.readValue(file.toFile(), PlayerState.class));
+    } catch (JsonProcessingException e) {
+      quarantine();
+      return Optional.empty();
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
@@ -52,6 +57,15 @@ public class StateStore {
   public void save(PlayerState state) {
     try {
       AtomicFiles.write(file, mapper.writeValueAsBytes(state));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  private void quarantine() {
+    try {
+      Files.move(
+          file, file.resolveSibling("state.json.corrupt"), StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }

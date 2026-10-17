@@ -102,7 +102,7 @@ public class PlaybackController {
    *
    * @return estado en JSON
    */
-  @GetMapping("/status.json")
+  @GetMapping({"/status.json", "/api/status"})
   @ResponseBody
   public Map<String, Object> statusJson() {
     return status.snapshot(manifests.appliedVersion());

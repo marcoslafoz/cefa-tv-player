@@ -21,6 +21,44 @@ import org.springframework.stereotype.Component;
 public class ChromiumLauncher {
 
   private static final long RESTART_DELAY_MS = 3000;
+  private static final List<String> KIOSK_FLAGS =
+      List.of(
+          "--kiosk",
+          "--start-fullscreen",
+          "--noerrdialogs",
+          "--disable-infobars",
+          "--disable-translate",
+          "--disable-features=Translate,TranslateUI,AutofillServerCommunication,"
+              + "PasswordManagerOnboarding,MediaRouter",
+          "--disable-save-password-bubble",
+          "--password-store=basic",
+          "--use-mock-keychain",
+          "--disable-session-crashed-bubble",
+          "--hide-crash-restore-bubble",
+          "--no-first-run",
+          "--no-default-browser-check",
+          "--disable-component-update",
+          "--disable-sync",
+          "--disable-default-apps",
+          "--disable-pinch",
+          "--overscroll-history-navigation=0",
+          "--autoplay-policy=no-user-gesture-required",
+          "--hide-scrollbars",
+          "--force-device-scale-factor=1",
+          "--lang=es-ES",
+          "--accept-lang=es-ES,es");
+  private static final List<String> VOLATILE_PROFILE_FILES =
+      List.of(
+          "Local State",
+          "Default/Preferences",
+          "Default/Secure Preferences",
+          "Default/Current Session",
+          "Default/Current Tabs",
+          "Default/Last Session",
+          "Default/Last Tabs",
+          "Default/Web Data",
+          "Default/Login Data",
+          "Default/Login Data-journal");
 
   private final PlayerProperties properties;
   private final BrowserController browser;
@@ -90,17 +128,7 @@ public class ChromiumLauncher {
     PlayerProperties.Chromium chromium = properties.chromium();
     List<String> command = new ArrayList<>();
     command.add(chromium.binary());
-    command.add("--kiosk");
-    command.add("--start-fullscreen");
-    command.add("--noerrdialogs");
-    command.add("--disable-infobars");
-    command.add("--no-first-run");
-    command.add("--disable-session-crashed-bubble");
-    command.add("--disable-features=Translate,TranslateUI");
-    command.add("--autoplay-policy=no-user-gesture-required");
-    command.add("--hide-scrollbars");
-    command.add("--overscroll-history-navigation=0");
-    command.add("--force-device-scale-factor=1");
+    command.addAll(KIOSK_FLAGS);
     DisplayGeometry geometry = display.selectedGeometry().orElse(new DisplayGeometry(0, 0, 0, 0));
     command.add("--window-position=" + geometry.x() + "," + geometry.y());
     if (geometry.width() > 0 && geometry.height() > 0) {
@@ -120,7 +148,7 @@ public class ChromiumLauncher {
   private void supervise() {
     while (running) {
       try {
-        removeStaleLocks();
+        cleanProfile();
         process =
             new ProcessBuilder(command())
                 .redirectErrorStream(true)
@@ -145,11 +173,22 @@ public class ChromiumLauncher {
     }
   }
 
-  private void removeStaleLocks() throws IOException {
+  void cleanProfile() throws IOException {
     Path profile = properties.dataDir().resolve("chromium");
     Files.createDirectories(profile);
     for (String lock : List.of("SingletonLock", "SingletonSocket", "SingletonCookie")) {
       Files.deleteIfExists(profile.resolve(lock));
+    }
+    for (String file : VOLATILE_PROFILE_FILES) {
+      Files.deleteIfExists(profile.resolve(file));
+    }
+    Path sessions = profile.resolve("Default/Sessions");
+    if (Files.isDirectory(sessions)) {
+      try (var entries = Files.list(sessions)) {
+        for (Path entry : entries.toList()) {
+          Files.deleteIfExists(entry);
+        }
+      }
     }
   }
 }

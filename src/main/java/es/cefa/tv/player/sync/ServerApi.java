@@ -2,8 +2,9 @@ package es.cefa.tv.player.sync;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import es.cefa.tv.player.enrollment.EnrollRequest;
-import es.cefa.tv.player.enrollment.EnrollResponse;
+import es.cefa.tv.player.pairing.PairingOffer;
+import es.cefa.tv.player.pairing.PairingPoll;
+import es.cefa.tv.player.pairing.PairingRequest;
 import es.cefa.tv.player.shared.model.Manifest;
 import es.cefa.tv.player.sync.dto.HeartbeatRequest;
 import es.cefa.tv.player.sync.dto.HeartbeatResponse;
@@ -68,19 +69,45 @@ public class ServerApi {
   }
 
   /**
-   * Da de alta el reproductor.
+   * Pide al servidor un código de emparejamiento.
    *
    * @param serverUrl URL base del core
    * @param request datos del reproductor
-   * @return credenciales asignadas
+   * @return emparejamiento pendiente con su código y su secreto
    */
-  public EnrollResponse enroll(String serverUrl, EnrollRequest request) {
+  public PairingOffer requestPairing(String serverUrl, PairingRequest request) {
     HttpRequest.Builder builder =
-        HttpRequest.newBuilder(URI.create(serverUrl + "/player-api/enroll"))
+        HttpRequest.newBuilder(URI.create(serverUrl + "/player-api/pairing/request"))
             .timeout(CALL_TIMEOUT)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(toJson(request)));
-    return read(send(builder, HttpResponse.BodyHandlers.ofByteArray()), EnrollResponse.class);
+    return read(send(builder, HttpResponse.BodyHandlers.ofByteArray()), PairingOffer.class);
+  }
+
+  /**
+   * Consulta el estado de un emparejamiento pendiente.
+   *
+   * @param serverUrl URL base del core
+   * @param pairingId identificador del emparejamiento
+   * @param secret secreto devuelto al pedirlo
+   * @return estado, con las credenciales si ya está aprobado
+   */
+  public PairingPoll pairingStatus(String serverUrl, String pairingId, String secret) {
+    HttpRequest.Builder builder =
+        HttpRequest.newBuilder(URI.create(serverUrl + "/player-api/pairing/" + pairingId))
+            .timeout(CALL_TIMEOUT)
+            .header("X-Pairing-Secret", secret)
+            .GET();
+    return read(send(builder, HttpResponse.BodyHandlers.ofByteArray()), PairingPoll.class);
+  }
+
+  /**
+   * URL base del servidor con el que se hacen las llamadas autenticadas.
+   *
+   * @return URL base o nula si aún no se ha configurado
+   */
+  public String baseUrl() {
+    return baseUrl;
   }
 
   /**
@@ -249,11 +276,18 @@ public class ServerApi {
     try {
       return http.send(builder.build(), handler);
     } catch (IOException e) {
-      throw new IllegalStateException("Sin conexión con el servidor: " + e.getMessage(), e);
+      throw new IllegalStateException(connectionMessage(e), e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("Interrumpido", e);
     }
+  }
+
+  private static String connectionMessage(IOException e) {
+    String detail = e.getMessage();
+    return detail == null || detail.isBlank()
+        ? "Sin conexión con el servidor"
+        : "Sin conexión con el servidor: " + detail;
   }
 
   private <T> T read(HttpResponse<byte[]> response, Class<T> type) {

@@ -1,4 +1,4 @@
-package es.cefa.tv.player.enrollment;
+package es.cefa.tv.player.pairing;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

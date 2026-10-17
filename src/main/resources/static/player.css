@@ -3,10 +3,14 @@ body {
   margin: 0;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: #05070d;
   overflow: hidden;
   cursor: none;
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  cursor: none;
 }
 
 #stage,
@@ -44,31 +48,103 @@ body {
   object-fit: contain;
 }
 
-#idle {
+#screen {
   position: fixed;
   inset: 0;
   display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: #cbd5e1;
-  background: radial-gradient(circle at 50% 40%, #0f172a, #000 70%);
+  gap: 4vh;
+  color: #e2e8f0;
+  background: radial-gradient(circle at 50% 38%, #111a2e 0%, #070b14 55%, #03050a 100%);
   z-index: 5;
+  text-align: center;
 }
 
-#idle.visible {
+#screen.visible {
   display: flex;
 }
 
-#idle .brand {
-  font-size: 5vw;
+#logo-box {
+  --logo-height: 30vh;
+  width: 60vw;
+  height: var(--logo-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  opacity: 0.95;
+}
+
+.block {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vh;
+}
+
+#screen[data-screen='PAIRING'] #logo-box {
+  --logo-height: 14vh;
+}
+
+#screen[data-screen='PAIRING'] #pairing {
+  display: flex;
+}
+
+#screen[data-screen='SEARCHING'] #logo-box,
+#screen[data-screen='CONNECTING'] #logo-box {
+  --logo-height: 20vh;
+}
+
+#screen[data-screen='SEARCHING'] #status,
+#screen[data-screen='CONNECTING'] #status {
+  display: flex;
+}
+
+#pairing-title {
+  font-size: 2.6vw;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+#pairing-code {
+  font-family: 'Liberation Mono', 'DejaVu Sans Mono', ui-monospace, monospace;
+  font-size: 13vw;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+  color: #fff;
+  padding: 2vh 4vw 2.4vh;
+  border: 0.4vw solid rgba(255, 255, 255, 0.18);
+  border-radius: 2vw;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#pairing-server {
+  font-size: 1.8vw;
+  color: #94a3b8;
+}
+
+#status-title {
+  font-size: 3vw;
+  font-weight: 600;
   color: #fff;
 }
 
-#idle-message {
-  font-size: 1.6vw;
-  opacity: 0.7;
+#status-detail,
+#status-retry {
+  font-size: 1.7vw;
+  color: #94a3b8;
+}
+
+#status-detail:empty,
+#status-retry:empty {
+  display: none;
 }

@@ -13,10 +13,11 @@
     </style>
   </head>
   <body>
-    <h1>CEFA TV Player</h1>
+    <h1>CEFA TV Player <span id="ver"></span></h1>
     <table id="status"></table>
     <script>
       function render(data) {
+        document.getElementById('ver').textContent = data.version ? 'v' + data.version + (data.build ? ' (build ' + data.build + ')' : '') : ''
         var table = document.getElementById('status')
         table.innerHTML = ''
         Object.keys(data).forEach(function (key) {
@@ -26,7 +27,7 @@
         })
       }
       function refresh() {
-        fetch('/status.json').then(function (r) { return r.json() }).then(render).catch(function () {})
+        fetch('/api/status').then(function (r) { return r.json() }).then(render).catch(function () {})
       }
       refresh()
       setInterval(refresh, 3000)

@@ -1,6 +1,7 @@
 package es.cefa.tv.player.display;
 
 import es.cefa.tv.player.shared.process.CommandRunner;
+import es.cefa.tv.player.status.PlayerStatus;
 import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.List;
@@ -14,8 +15,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
- * Detecta los monitores con xrandr, elige la salida donde se reproduce (la primaria si existe y, si
- * no, la primera conectada), adapta su resolución y avisa cuando algo cambia.
+ * Detecta los monitores con xrandr, elige la salida donde se reproduce (la preferida por el
+ * servidor si está conectada y, si no, la primaria o la primera conectada), adapta su resolución y
+ * avisa cuando algo cambia.
  */
 @Slf4j
 @Service
@@ -23,27 +25,40 @@ public class DisplayService {
 
   private final CommandRunner runner;
   private final ApplicationEventPublisher events;
+  private final DisplayPreferenceStore preferences;
+  private final PlayerStatus status;
   private final Map<String, String> manualModes = new HashMap<>();
   private volatile List<XrandrOutput> outputs = List.of();
   private volatile Optional<XrandrOutput> selected = Optional.empty();
   private String lastSignature = "";
   private String lastSelection = "";
   private String failedApply = "";
+  private volatile String preferredOutput;
+  private String activeNotice;
 
   /**
    * Crea el servicio.
    *
    * @param runner ejecutor de programas del sistema
    * @param events publicador de eventos de Spring
+   * @param preferences salida preferida persistida
+   * @param status estado compartido donde se anota el aviso de salida no disponible
    */
-  public DisplayService(CommandRunner runner, ApplicationEventPublisher events) {
+  public DisplayService(
+      CommandRunner runner,
+      ApplicationEventPublisher events,
+      DisplayPreferenceStore preferences,
+      PlayerStatus status) {
     this.runner = runner;
     this.events = events;
+    this.preferences = preferences;
+    this.status = status;
   }
 
   /** Detecta las pantallas y adapta la resolución antes de que arranque el navegador. */
   @PostConstruct
   public synchronized void start() {
+    preferredOutput = preferences.load().orElse(null);
     refresh(false, false);
   }
 
@@ -127,7 +142,44 @@ public class DisplayService {
         .map(display -> display.width() + "x" + display.height());
   }
 
+  /**
+   * Fija la salida preferida por el servidor y reajusta la pantalla si cambia la elegida.
+   *
+   * @param output nombre de la salida, o nulo o vacío para la selección automática
+   */
+  public synchronized void setPreferredOutput(String output) {
+    String normalized = output == null || output.isBlank() ? null : output.trim();
+    if (Objects.equals(normalized, preferredOutput)) {
+      return;
+    }
+    preferredOutput = normalized;
+    preferences.save(normalized);
+    refresh(true, true);
+  }
+
+  /**
+   * Salida preferida vigente.
+   *
+   * @return nombre de la salida o nulo si la selección es automática
+   */
+  public String preferredOutput() {
+    return preferredOutput;
+  }
+
   static Optional<XrandrOutput> choose(List<XrandrOutput> outputs) {
+    return choose(outputs, null);
+  }
+
+  static Optional<XrandrOutput> choose(List<XrandrOutput> outputs, String preferred) {
+    if (preferred != null) {
+      Optional<XrandrOutput> wanted =
+          outputs.stream()
+              .filter(output -> output.connected() && output.name().equals(preferred))
+              .findFirst();
+      if (wanted.isPresent()) {
+        return wanted;
+      }
+    }
     Optional<XrandrOutput> primary =
         outputs.stream().filter(output -> output.connected() && output.primary()).findFirst();
     return primary.or(() -> outputs.stream().filter(XrandrOutput::connected).findFirst());
@@ -135,11 +187,12 @@ public class DisplayService {
 
   private void refresh(boolean publish, boolean forcePublish) {
     List<XrandrOutput> detected = query();
-    Optional<XrandrOutput> chosen = choose(detected);
+    Optional<XrandrOutput> chosen = choose(detected, preferredOutput);
     if (chosen.isPresent() && adapt(chosen.get())) {
       detected = query();
-      chosen = choose(detected);
+      chosen = choose(detected, preferredOutput);
     }
+    reportPreferenceNotice(chosen);
     outputs = detected;
     selected = chosen;
     String newSignature = signature(detected);
@@ -154,6 +207,30 @@ public class DisplayService {
           detected.stream().filter(XrandrOutput::connected).map(XrandrOutput::name).toList(),
           chosen.map(XrandrOutput::name).orElse("ninguna"));
       events.publishEvent(new DisplayChangedEvent(selectionChanged));
+    }
+  }
+
+  private void reportPreferenceNotice(Optional<XrandrOutput> chosen) {
+    String preferred = preferredOutput;
+    boolean unavailable =
+        preferred != null && !chosen.map(output -> output.name().equals(preferred)).orElse(false);
+    String lastError = status.lastError();
+    boolean ownsError = lastError == null || lastError.equals(activeNotice);
+    if (unavailable) {
+      String notice =
+          "Salida "
+              + preferred
+              + " no disponible, usando "
+              + chosen.map(XrandrOutput::name).orElse("ninguna");
+      if (ownsError) {
+        status.error(notice);
+      }
+      activeNotice = notice;
+    } else if (activeNotice != null) {
+      if (activeNotice.equals(lastError)) {
+        status.error(null);
+      }
+      activeNotice = null;
     }
   }
 

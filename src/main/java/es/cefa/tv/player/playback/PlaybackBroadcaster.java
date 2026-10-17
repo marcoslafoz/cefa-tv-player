@@ -61,6 +61,20 @@ public class PlaybackBroadcaster {
     }
   }
 
+  /**
+   * Publica un aviso solo a las páginas conectadas, sin guardarlo para quien se suscriba después.
+   *
+   * @param event aviso serializable
+   */
+  public void publishTransient(Object event) {
+    try {
+      String json = mapper.writeValueAsString(event);
+      emitters.forEach(emitter -> send(emitter, json));
+    } catch (JsonProcessingException e) {
+      log.warn("Aviso no serializable: {}", e.getMessage());
+    }
+  }
+
   /** Mantiene vivas las conexiones SSE. */
   @Scheduled(fixedDelay = 15000)
   public void keepAlive() {

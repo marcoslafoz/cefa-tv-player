@@ -41,7 +41,6 @@ class ShellServiceTest {
             java.nio.file.Path.of("."),
             "",
             "",
-            "",
             47808,
             30,
             null,

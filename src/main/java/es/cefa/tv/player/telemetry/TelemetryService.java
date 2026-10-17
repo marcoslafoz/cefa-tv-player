@@ -2,6 +2,7 @@ package es.cefa.tv.player.telemetry;
 
 import es.cefa.tv.player.display.DisplayChangedEvent;
 import es.cefa.tv.player.display.DisplayService;
+import es.cefa.tv.player.playback.IdleLogoService;
 import es.cefa.tv.player.sync.PlayerSocket;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -16,6 +17,7 @@ public class TelemetryService {
   private final SystemInfoCollector collector;
   private final DisplayService displays;
   private final PlayerSocket socket;
+  private final IdleLogoService idleLogo;
 
   /**
    * Crea el servicio.
@@ -23,12 +25,17 @@ public class TelemetryService {
    * @param collector recolector de datos del equipo
    * @param displays pantallas detectadas
    * @param socket WebSocket con el servidor
+   * @param idleLogo logo de la pantalla sin programación
    */
   public TelemetryService(
-      SystemInfoCollector collector, DisplayService displays, PlayerSocket socket) {
+      SystemInfoCollector collector,
+      DisplayService displays,
+      PlayerSocket socket,
+      IdleLogoService idleLogo) {
     this.collector = collector;
     this.displays = displays;
     this.socket = socket;
+    this.idleLogo = idleLogo;
   }
 
   /**
@@ -37,7 +44,9 @@ public class TelemetryService {
    * @return datos del equipo y pantallas
    */
   public Telemetry snapshot() {
-    return new Telemetry(collector.collect(), displays.displays());
+    return new Telemetry(
+        collector.collect().withConfig(displays.preferredOutput(), idleLogo.current()),
+        displays.displays());
   }
 
   /** Envía la telemetría cada 15 segundos mientras el WebSocket esté abierto. */

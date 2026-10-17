@@ -11,9 +11,18 @@
       <div class="layer" id="layer-a"></div>
       <div class="layer" id="layer-b"></div>
     </div>
-    <div id="idle" class="visible">
-      <div class="brand">CEFA TV</div>
-      <div id="idle-message">Iniciando</div>
+    <div id="screen" class="visible" data-screen="LOGO">
+      <div id="logo-box"><img id="logo" src="/brand/cefa-logo-white.svg" alt="CEFA" /></div>
+      <div id="pairing" class="block">
+        <div id="pairing-title">Introduce este código en CEFA TV Server</div>
+        <div id="pairing-code">------</div>
+        <div id="pairing-server"></div>
+      </div>
+      <div id="status" class="block">
+        <div id="status-title"></div>
+        <div id="status-detail"></div>
+        <div id="status-retry"></div>
+      </div>
     </div>
     <script src="/player.js"></script>
   </body>

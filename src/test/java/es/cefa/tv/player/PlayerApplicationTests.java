@@ -12,8 +12,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "cefa-tv.chromium.enabled=false",
-      "cefa-tv.data-dir=${java.io.tmpdir}/cefa-tv-player-context-test",
-      "cefa-tv.enrollment-key="
+      "cefa-tv.data-dir=${java.io.tmpdir}/cefa-tv-player-context-test"
     })
 class PlayerApplicationTests {
 

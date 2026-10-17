@@ -31,7 +31,7 @@ class FileStoreTest {
 
   @BeforeEach
   void setUp() throws IOException {
-    store = new FileStore(new PlayerProperties(dir, "", "", "", 47808, 30, null, "headless", null));
+    store = new FileStore(new PlayerProperties(dir, "", "", 47808, 30, null, "headless", null));
   }
 
   @Test

@@ -7,7 +7,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Configuración del reproductor.
  *
  * @param dataDir directorio persistente (estado, manifest y ficheros)
- * @param enrollmentKey clave de alta en el servidor
  * @param server URL base del core indicada manualmente; vacía para usar el descubrimiento
  * @param playerName nombre solicitado para el reproductor; vacío para usar el hostname
  * @param discoveryPort puerto UDP del sidecar de descubrimiento
@@ -19,7 +18,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "cefa-tv")
 public record PlayerProperties(
     Path dataDir,
-    String enrollmentKey,
     String server,
     String playerName,
     int discoveryPort,
@@ -54,15 +52,6 @@ public record PlayerProperties(
     public boolean hostMode() {
       return "host".equalsIgnoreCase(mode);
     }
-  }
-
-  /**
-   * Indica si hay una clave de alta configurada.
-   *
-   * @return {@code true} si la clave no está vacía
-   */
-  public boolean hasEnrollmentKey() {
-    return enrollmentKey != null && !enrollmentKey.isBlank();
   }
 
   /**

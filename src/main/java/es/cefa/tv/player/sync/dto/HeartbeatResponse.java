@@ -8,9 +8,19 @@ import java.util.List;
  *
  * @param desiredVersion versión que debería aplicar el reproductor
  * @param commands órdenes pendientes
+ * @param config configuración que fija el servidor, nula si la respuesta no la trae
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record HeartbeatResponse(long desiredVersion, List<Command> commands) {
+public record HeartbeatResponse(long desiredVersion, List<Command> commands, Config config) {
+
+  /**
+   * Configuración del reproductor decidida desde el servidor.
+   *
+   * @param preferredOutput salida de vídeo preferida, nula para la selección automática
+   * @param idleLogo logo efectivo de la pantalla sin programación, {@code CEFA} o {@code ALGONTEC}
+   */
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record Config(String preferredOutput, String idleLogo) {}
 
   /**
    * Orden pendiente.

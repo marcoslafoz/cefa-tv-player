@@ -45,10 +45,10 @@ class SyncServiceTest {
     new Random(7).nextBytes(large);
     mapper = new ObjectMapper().findAndRegisterModules();
     PlayerProperties properties =
-        new PlayerProperties(dir, "", "", "", 47808, 30, null, "headless", null);
+        new PlayerProperties(dir, "", "", 47808, 30, null, "headless", null);
     files = new FileStore(properties);
     manifests = new ManifestStore(properties, mapper);
-    status = new PlayerStatus();
+    status = new PlayerStatus("test");
     server = new FakeServer();
     server.files.put(sha(small), small);
     server.files.put(sha(large), large);

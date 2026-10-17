@@ -1,6 +1,7 @@
 package es.cefa.tv.player.telemetry;
 
 import com.sun.management.OperatingSystemMXBean;
+import es.cefa.tv.player.shared.config.BuildInfo;
 import es.cefa.tv.player.shared.config.PlayerProperties;
 import es.cefa.tv.player.shared.process.CommandRunner;
 import java.io.IOException;
@@ -39,6 +40,7 @@ public class SystemInfoCollector {
   private final PlayerProperties properties;
   private final CommandRunner runner;
   private final String playerVersion;
+  private final String playerBuild;
   private long[] lastTicks = new long[0];
   private long lastTicksAt;
   private Double lastCpuPercent;
@@ -50,14 +52,17 @@ public class SystemInfoCollector {
    * @param properties configuración del reproductor
    * @param runner ejecutor de programas del sistema
    * @param playerVersion versión del reproductor
+   * @param playerBuild commit corto con el que se construyó la imagen
    */
   public SystemInfoCollector(
       PlayerProperties properties,
       CommandRunner runner,
-      @Value("${info.app.version:dev}") String playerVersion) {
+      @Value("${info.app.version:dev}") String playerVersion,
+      @Value("${info.app.build:unknown}") String playerBuild) {
     this.properties = properties;
     this.runner = runner;
-    this.playerVersion = playerVersion;
+    this.playerVersion = BuildInfo.version(playerVersion);
+    this.playerBuild = BuildInfo.build(playerBuild);
   }
 
   /**
@@ -92,12 +97,15 @@ public class SystemInfoCollector {
         ips(),
         macs(),
         playerVersion,
+        playerBuild,
         System.getProperty("java.version"),
         chromiumVersion(),
         ZoneId.systemDefault().getId(),
         properties.displayMode(),
         properties.shell().enabled(),
-        properties.shell().hostMode() ? "host" : "container");
+        properties.shell().hostMode() ? "host" : "container",
+        null,
+        null);
   }
 
   private Long ramUsed(String meminfo, Long ramTotal) {

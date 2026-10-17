@@ -19,6 +19,7 @@ COPY --from=java /opt/java/openjdk /opt/java/openjdk
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       chromium \
+      chromium-l10n \
       xvfb \
       xserver-xorg-core \
       xserver-xorg-input-libinput \
@@ -47,7 +48,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/app.jar app.jar
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY docker/chromium/cefa-tv.json /etc/chromium/policies/managed/cefa-tv.json
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh && mkdir -p /data
 
 ENV CEFA_TV_DATA_DIR=/data
 ENV DISPLAY_MODE=headless
@@ -57,9 +60,12 @@ ENV CEFA_TV_SHELL_ENABLED=true
 ENV CEFA_TV_SHELL_MODE=container
 ENV CEFA_TV_RESOLUTION=1920x1080x24
 ENV JAVA_OPTS="-Xmx512m"
+ARG PLAYER_BUILD=unknown
+ENV PLAYER_BUILD=${PLAYER_BUILD}
+LABEL org.opencontainers.image.title="cefa-tv-player" org.opencontainers.image.revision="${PLAYER_BUILD}"
 VOLUME /data
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8081/actuator/health || exit 1
+HEALTHCHECK --interval=30s --timeout=8s --start-period=90s --retries=3 \
+  CMD /usr/local/bin/healthcheck.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

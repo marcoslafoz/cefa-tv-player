@@ -16,6 +16,18 @@ public class InputMapper {
   private static final int BUTTON_RIGHT = 2;
   private static final int BUTTON_MIDDLE = 4;
   private static final int MODIFIERS_NO_TEXT = 1 | 2 | 4;
+  private static final int MODIFIER_ALT = 1;
+  private static final int MODIFIER_CTRL = 2;
+  private static final int MODIFIER_META = 4;
+  private static final int MODIFIER_SHIFT = 8;
+  private static final Map<String, String> EDIT_COMMANDS =
+      Map.of(
+          "a", "selectAll",
+          "c", "copy",
+          "x", "cut",
+          "v", "paste",
+          "z", "undo",
+          "y", "redo");
   private static final Map<String, Integer> VIRTUAL_KEYS =
       Map.ofEntries(
           Map.entry("Backspace", 8),
@@ -35,7 +47,22 @@ public class InputMapper {
           Map.entry("ArrowRight", 39),
           Map.entry("ArrowDown", 40),
           Map.entry("Insert", 45),
-          Map.entry("Delete", 46));
+          Map.entry("Delete", 46),
+          Map.entry("CapsLock", 20),
+          Map.entry("Meta", 91),
+          Map.entry("ContextMenu", 93),
+          Map.entry("F1", 112),
+          Map.entry("F2", 113),
+          Map.entry("F3", 114),
+          Map.entry("F4", 115),
+          Map.entry("F5", 116),
+          Map.entry("F6", 117),
+          Map.entry("F7", 118),
+          Map.entry("F8", 119),
+          Map.entry("F9", 120),
+          Map.entry("F10", 121),
+          Map.entry("F11", 122),
+          Map.entry("F12", 123));
 
   private final ObjectMapper mapper;
   private int pressedButtons;
@@ -120,9 +147,19 @@ public class InputMapper {
     params.put("key", key);
     params.put("code", input.path("code").asText(""));
     params.put("modifiers", modifiers);
-    int virtualCode = virtualKeyCode(key);
+    int virtualCode = input.path("windowsVirtualKeyCode").asInt(0);
+    if (virtualCode <= 0) {
+      virtualCode = virtualKeyCode(key);
+    }
     if (virtualCode > 0) {
       params.put("windowsVirtualKeyCode", virtualCode);
+      params.put("nativeVirtualKeyCode", virtualCode);
+    }
+    if (down) {
+      String command = editCommand(key, modifiers);
+      if (command != null) {
+        params.putArray("commands").add(command);
+      }
     }
     boolean printable =
         key.codePointCount(0, key.length()) == 1 && (modifiers & MODIFIERS_NO_TEXT) == 0;
@@ -136,6 +173,18 @@ public class InputMapper {
       params.put("type", "rawKeyDown");
     }
     return new CdpCommand("Input.dispatchKeyEvent", params);
+  }
+
+  private static String editCommand(String key, int modifiers) {
+    boolean shortcut = (modifiers & (MODIFIER_CTRL | MODIFIER_META)) != 0;
+    if (!shortcut || (modifiers & MODIFIER_ALT) != 0 || key.length() != 1) {
+      return null;
+    }
+    String lower = key.toLowerCase(java.util.Locale.ROOT);
+    if ("z".equals(lower) && (modifiers & MODIFIER_SHIFT) != 0) {
+      return "redo";
+    }
+    return EDIT_COMMANDS.get(lower);
   }
 
   private static int virtualKeyCode(String key) {

@@ -22,7 +22,6 @@ class SystemInfoCollectorTest {
             dir,
             "",
             "",
-            "",
             47808,
             30,
             new PlayerProperties.Chromium(true, "chromium", 9222, true),
@@ -32,7 +31,8 @@ class SystemInfoCollectorTest {
         new SystemInfoCollector(
             properties,
             command -> Optional.of("Chromium 130.0.6723.116 built on Debian GNU/Linux 12"),
-            "0.1.0");
+            "0.1.0-SNAPSHOT",
+            "abc1234");
 
     SystemInfo info = collector.collect();
     JsonNode json = new ObjectMapper().valueToTree(info);
@@ -42,6 +42,7 @@ class SystemInfoCollectorTest {
     assertThat(info.javaVersion()).isNotBlank();
     assertThat(info.chromiumVersion()).isEqualTo("130.0.6723.116");
     assertThat(info.playerVersion()).isEqualTo("0.1.0");
+    assertThat(info.playerBuild()).isEqualTo("abc1234");
     assertThat(info.displayMode()).isEqualTo("headless");
     assertThat(info.shellEnabled()).isTrue();
     assertThat(info.shellMode()).isEqualTo("container");
@@ -64,6 +65,7 @@ class SystemInfoCollectorTest {
                 "ips",
                 "macs",
                 "playerVersion",
+                "playerBuild",
                 "javaVersion",
                 "chromiumVersion",
                 "timezone",
@@ -80,7 +82,6 @@ class SystemInfoCollectorTest {
             dir,
             "",
             "",
-            "",
             47808,
             30,
             new PlayerProperties.Chromium(false, "chromium", 9222, true),
@@ -88,9 +89,10 @@ class SystemInfoCollectorTest {
             new PlayerProperties.Shell(false, "host"));
 
     SystemInfo info =
-        new SystemInfoCollector(properties, command -> Optional.empty(), "0.1.0").collect();
+        new SystemInfoCollector(properties, command -> Optional.empty(), "0.1.0", " ").collect();
 
     assertThat(info.chromiumVersion()).isNull();
+    assertThat(info.playerBuild()).isEqualTo("unknown");
     assertThat(info.shellEnabled()).isFalse();
     assertThat(info.shellMode()).isEqualTo("host");
   }

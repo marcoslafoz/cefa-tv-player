@@ -3,12 +3,17 @@ package es.cefa.tv.player.display;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import es.cefa.tv.player.shared.config.PlayerProperties;
 import es.cefa.tv.player.shared.process.CommandRunner;
+import es.cefa.tv.player.status.PlayerStatus;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DisplayServiceTest {
 
@@ -23,13 +28,26 @@ class DisplayServiceTest {
       "DP-1 connected 1920x1080+1920+0 (normal left inverted right x axis y axis) 0mm x 0mm\n"
           + "   1920x1080     60.00*+\n";
 
+  @TempDir Path dir;
+
   private final FakeRunner runner = new FakeRunner();
+  private final PlayerStatus status = new PlayerStatus("test");
   private final List<DisplayChangedEvent> events = new ArrayList<>();
   private DisplayService service;
 
   @BeforeEach
   void setUp() {
-    service = new DisplayService(runner, event -> events.add((DisplayChangedEvent) event));
+    service = newService();
+  }
+
+  private DisplayService newService() {
+    PlayerProperties properties =
+        new PlayerProperties(dir, "", "", 47808, 30, null, "headless", null);
+    return new DisplayService(
+        runner,
+        event -> events.add((DisplayChangedEvent) event),
+        new DisplayPreferenceStore(properties, new ObjectMapper()),
+        status);
   }
 
   @Test
@@ -189,6 +207,141 @@ class DisplayServiceTest {
     assertThat(service.displays()).isEmpty();
     assertThat(service.selectedGeometry()).isEmpty();
     assertThat(service.selectedResolution()).isEmpty();
+  }
+
+  @Test
+  void usesTheConnectedPreferredOutputInsteadOfThePrimary() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+
+    service.setPreferredOutput("DP-1");
+
+    assertThat(selectedName()).isEqualTo("DP-1");
+    assertThat(service.selectedGeometry()).contains(new DisplayGeometry(1920, 0, 1920, 1080));
+    assertThat(service.preferredOutput()).isEqualTo("DP-1");
+    assertThat(events).hasSize(1);
+    assertThat(events.get(0).selectionChanged()).isTrue();
+    assertThat(status.lastError()).isNull();
+  }
+
+  @Test
+  void switchesTheInactivePreferredOutputToItsPreferredMode() {
+    runner.xrandr =
+        HEADER
+            + HDMI_ACTIVE
+            + "DP-1 connected (normal left inverted right x axis y axis)\n"
+            + "   1920x1080     60.00 +\n";
+    runner.afterAuto = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+
+    service.setPreferredOutput("DP-1");
+
+    assertThat(runner.commands).contains(List.of("xrandr", "--output", "DP-1", "--auto"));
+    assertThat(selectedName()).isEqualTo("DP-1");
+  }
+
+  @Test
+  void fallsBackToAutomaticAndReportsWhenThePreferredOutputIsNotConnected() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + "DP-1 disconnected (normal)\n";
+    service.start();
+
+    service.setPreferredOutput("DP-1");
+
+    assertThat(selectedName()).isEqualTo("HDMI-1");
+    assertThat(status.lastError()).isEqualTo("Salida DP-1 no disponible, usando HDMI-1");
+  }
+
+  @Test
+  void returnsToThePreferredOutputWhenItAppearsAndClearsTheNotice() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + "DP-1 disconnected (normal)\n";
+    service.start();
+    service.setPreferredOutput("DP-1");
+    events.clear();
+
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.poll();
+
+    assertThat(selectedName()).isEqualTo("DP-1");
+    assertThat(status.lastError()).isNull();
+    assertThat(events).hasSize(1);
+    assertThat(events.get(0).selectionChanged()).isTrue();
+  }
+
+  @Test
+  void doesNotOverwriteAnUnrelatedErrorWhenThePreferredOutputIsMissing() {
+    runner.xrandr = HEADER + HDMI_ACTIVE;
+    service.start();
+    status.error("Resolución rechazada");
+
+    service.setPreferredOutput("DP-1");
+
+    assertThat(status.lastError()).isEqualTo("Resolución rechazada");
+  }
+
+  @Test
+  void clearingThePreferenceReturnsToAutomaticSelection() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+    service.setPreferredOutput("DP-1");
+
+    service.setPreferredOutput(null);
+
+    assertThat(service.preferredOutput()).isNull();
+    assertThat(selectedName()).isEqualTo("HDMI-1");
+    service.setPreferredOutput("  ");
+    assertThat(service.preferredOutput()).isNull();
+  }
+
+  @Test
+  void ignoresARepeatedPreferenceWithoutPublishingEvents() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+    service.setPreferredOutput("DP-1");
+    events.clear();
+
+    service.setPreferredOutput("DP-1");
+
+    assertThat(events).isEmpty();
+  }
+
+  @Test
+  void keepsThePreferenceAcrossARestartWithoutServer() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+    service.setPreferredOutput("DP-1");
+
+    DisplayService restarted = newService();
+    restarted.start();
+
+    assertThat(restarted.preferredOutput()).isEqualTo("DP-1");
+    assertThat(
+            restarted.displays().stream()
+                .filter(DisplayOutput::selected)
+                .findFirst()
+                .orElseThrow()
+                .output())
+        .isEqualTo("DP-1");
+  }
+
+  @Test
+  void forgetsThePersistedPreferenceWhenReturningToAutomatic() {
+    runner.xrandr = HEADER + HDMI_ACTIVE + DP_SECOND;
+    service.start();
+    service.setPreferredOutput("DP-1");
+    service.setPreferredOutput(null);
+
+    DisplayService restarted = newService();
+    restarted.start();
+
+    assertThat(restarted.preferredOutput()).isNull();
+  }
+
+  private String selectedName() {
+    return service.displays().stream()
+        .filter(DisplayOutput::selected)
+        .findFirst()
+        .orElseThrow()
+        .output();
   }
 
   private static final class FakeRunner implements CommandRunner {

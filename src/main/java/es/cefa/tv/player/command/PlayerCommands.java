@@ -3,7 +3,10 @@ package es.cefa.tv.player.command;
 import com.fasterxml.jackson.databind.JsonNode;
 import es.cefa.tv.player.browser.BrowserController;
 import es.cefa.tv.player.display.DisplayService;
-import es.cefa.tv.player.enrollment.StateStore;
+import es.cefa.tv.player.pairing.StateStore;
+import es.cefa.tv.player.pairing.UnenrolledEvent;
+import es.cefa.tv.player.playback.IdleLogoService;
+import es.cefa.tv.player.preview.PreviewService;
 import es.cefa.tv.player.remote.RemoteService;
 import es.cefa.tv.player.shell.ShellService;
 import es.cefa.tv.player.status.PlayerStatus;
@@ -16,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +34,8 @@ public class PlayerCommands {
 
   private final PlayerSocket socket;
   private final RemoteService remote;
+  private final PreviewService preview;
+  private final IdleLogoService idleLogo;
   private final SyncService sync;
   private final BrowserController browser;
   private final StateStore state;
@@ -39,6 +45,7 @@ public class PlayerCommands {
   private final DisplayService display;
   private final PlayerStatus status;
   private final ConfigurableApplicationContext context;
+  private final ApplicationEventPublisher events;
   private final ExecutorService executor =
       Executors.newSingleThreadExecutor(
           runnable -> {
@@ -52,6 +59,8 @@ public class PlayerCommands {
    *
    * @param socket conexión con el servidor
    * @param remote control remoto
+   * @param preview vista previa ligera
+   * @param idleLogo logo de la pantalla sin programación
    * @param sync sincronización
    * @param browser control del navegador
    * @param state estado de alta
@@ -61,10 +70,13 @@ public class PlayerCommands {
    * @param display pantallas y resolución
    * @param status estado compartido, donde se anotan los errores de las órdenes
    * @param context contexto de Spring, para el cierre
+   * @param events publicador de eventos, para avisar de la baja
    */
   public PlayerCommands(
       PlayerSocket socket,
       RemoteService remote,
+      PreviewService preview,
+      IdleLogoService idleLogo,
       SyncService sync,
       BrowserController browser,
       StateStore state,
@@ -73,9 +85,12 @@ public class PlayerCommands {
       ShellService shell,
       DisplayService display,
       PlayerStatus status,
-      ConfigurableApplicationContext context) {
+      ConfigurableApplicationContext context,
+      ApplicationEventPublisher events) {
     this.socket = socket;
     this.remote = remote;
+    this.preview = preview;
+    this.idleLogo = idleLogo;
     this.sync = sync;
     this.browser = browser;
     this.state = state;
@@ -85,6 +100,7 @@ public class PlayerCommands {
     this.display = display;
     this.status = status;
     this.context = context;
+    this.events = events;
   }
 
   /** Conecta los mensajes del WebSocket y los fotogramas del control remoto. */
@@ -92,6 +108,10 @@ public class PlayerCommands {
   public void wire() {
     socket.onMessage(message -> executor.execute(() -> handle(message)));
     remote.setFrameSink(socket::sendBinary);
+    remote.setMessageSink(socket::sendText);
+    socket.onDisconnect(remote::stop);
+    preview.setMessageSink(socket::trySendText);
+    socket.onDisconnect(preview::stop);
   }
 
   /**
@@ -109,6 +129,12 @@ public class PlayerCommands {
               message.path("quality").asInt(DEFAULT_QUALITY),
               message.path("maxWidth").asInt(DEFAULT_MAX_WIDTH));
       case "REMOTE_STOP" -> remote.stop();
+      case "PREVIEW_START" ->
+          preview.start(
+              message.path("intervalSec").asInt(0),
+              message.path("maxWidth").asInt(0),
+              message.path("quality").asInt(0));
+      case "PREVIEW_STOP" -> preview.stop();
       case "INPUT" -> remote.input(message);
       case "SHELL_OPEN" ->
           shell.open(
@@ -123,6 +149,7 @@ public class PlayerCommands {
               message.path("cols").asInt(0),
               message.path("rows").asInt(0));
       case "SHELL_CLOSE" -> shell.close(message.path("sessionId").asText());
+      case "CONFIG" -> applyConfig(message);
       default ->
           execute(
               type,
@@ -160,6 +187,35 @@ public class PlayerCommands {
     }
   }
 
+  private void applyConfig(JsonNode message) {
+    if (message.has("preferredOutput")) {
+      JsonNode output = message.get("preferredOutput");
+      applyPreferredOutput(output.isNull() ? null : output.asText());
+    }
+    if (message.has("idleLogo")) {
+      JsonNode logo = message.get("idleLogo");
+      applyIdleLogo(logo.isNull() ? null : logo.asText());
+    }
+  }
+
+  /**
+   * Aplica el logo de la pantalla sin programación que fija el servidor.
+   *
+   * @param logo {@code CEFA} o {@code ALGONTEC}; nulo o desconocido equivale a {@code CEFA}
+   */
+  public void applyIdleLogo(String logo) {
+    idleLogo.set(logo);
+  }
+
+  /**
+   * Aplica la salida de vídeo preferida que fija el servidor.
+   *
+   * @param preferredOutput nombre de la salida, o nulo para la selección automática
+   */
+  public void applyPreferredOutput(String preferredOutput) {
+    display.setPreferredOutput(preferredOutput);
+  }
+
   private void setResolution(String output, int width, int height) {
     try {
       display.setResolution(output, width, height);
@@ -173,11 +229,12 @@ public class PlayerCommands {
   private void unenroll() {
     log.warn("Baja del reproductor: se borra el estado local");
     remote.stop();
+    preview.stop();
     shell.closeAll();
     state.clear();
     manifests.clear();
     files.clear();
-    exit(0);
+    events.publishEvent(new UnenrolledEvent());
   }
 
   private void exit(int code) {

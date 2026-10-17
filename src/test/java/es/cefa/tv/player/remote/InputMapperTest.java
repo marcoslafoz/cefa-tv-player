@@ -82,4 +82,57 @@ class InputMapperTest {
     assertThat(text.params().get("text").asText()).isEqualTo("hola");
     assertThat(map("{\"kind\":\"DANCE\"}")).isEmpty();
   }
+
+  @Test
+  void usesTheVirtualKeyCodeSentByTheViewer() throws Exception {
+    CdpCommand command =
+        map("{\"kind\":\"KEY_DOWN\",\"key\":\"F5\",\"code\":\"F5\",\"windowsVirtualKeyCode\":116}")
+            .get(0);
+    assertThat(command.params().get("windowsVirtualKeyCode").asInt()).isEqualTo(116);
+    assertThat(command.params().get("nativeVirtualKeyCode").asInt()).isEqualTo(116);
+    assertThat(command.params().get("type").asText()).isEqualTo("rawKeyDown");
+  }
+
+  @Test
+  void knowsFunctionKeysWithoutAViewerCode() throws Exception {
+    CdpCommand command = map("{\"kind\":\"KEY_DOWN\",\"key\":\"F12\",\"code\":\"F12\"}").get(0);
+    assertThat(command.params().get("windowsVirtualKeyCode").asInt()).isEqualTo(123);
+  }
+
+  @Test
+  void editingShortcutsCarryTheEditorCommand() throws Exception {
+    CdpCommand selectAll =
+        map("{\"kind\":\"KEY_DOWN\",\"key\":\"a\",\"code\":\"KeyA\",\"modifiers\":2}").get(0);
+    assertThat(selectAll.params().get("commands").get(0).asText()).isEqualTo("selectAll");
+    CdpCommand paste =
+        map("{\"kind\":\"KEY_DOWN\",\"key\":\"v\",\"code\":\"KeyV\",\"modifiers\":4}").get(0);
+    assertThat(paste.params().get("commands").get(0).asText()).isEqualTo("paste");
+    CdpCommand redo =
+        map("{\"kind\":\"KEY_DOWN\",\"key\":\"Z\",\"code\":\"KeyZ\",\"modifiers\":10}").get(0);
+    assertThat(redo.params().get("commands").get(0).asText()).isEqualTo("redo");
+    CdpCommand release =
+        map("{\"kind\":\"KEY_UP\",\"key\":\"a\",\"code\":\"KeyA\",\"modifiers\":2}").get(0);
+    assertThat(release.params().has("commands")).isFalse();
+    CdpCommand plain = map("{\"kind\":\"KEY_DOWN\",\"key\":\"a\",\"code\":\"KeyA\"}").get(0);
+    assertThat(plain.params().has("commands")).isFalse();
+  }
+
+  @Test
+  void symbolsAndAccentedLettersTypedAsKeysCarryTheirText() throws Exception {
+    for (String symbol : List.of("@", "#", "~", "€", "ñ", "á", "Ñ", "ç", "¿")) {
+      CdpCommand command =
+          map("{\"kind\":\"KEY_DOWN\",\"key\":\"" + symbol + "\",\"code\":\"Digit2\"}").get(0);
+      assertThat(command.params().get("type").asText()).isEqualTo("keyDown");
+      assertThat(command.params().get("text").asText()).isEqualTo(symbol);
+    }
+  }
+
+  @Test
+  void textWithSymbolsAccentsAndEmojiIsInsertedVerbatim() throws Exception {
+    String typed = "user@cefa.es #1 ~ 5€ ñ á é ü 日本 😀";
+    String escaped = json.writeValueAsString(typed);
+    CdpCommand command = map("{\"kind\":\"TEXT\",\"text\":" + escaped + "}").get(0);
+    assertThat(command.method()).isEqualTo("Input.insertText");
+    assertThat(command.params().get("text").asText()).isEqualTo(typed);
+  }
 }

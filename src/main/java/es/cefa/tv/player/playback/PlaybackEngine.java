@@ -1,6 +1,7 @@
 package es.cefa.tv.player.playback;
 
 import es.cefa.tv.player.browser.BrowserController;
+import es.cefa.tv.player.pairing.PlayerPhase;
 import es.cefa.tv.player.shared.model.Manifest;
 import es.cefa.tv.player.status.PlayerStatus;
 import es.cefa.tv.player.storage.ManifestStore;
@@ -32,10 +33,12 @@ public class PlaybackEngine {
   private final PlaybackBroadcaster broadcaster;
   private final BrowserController browser;
   private final PlayerStatus status;
+  private final PlaybackHold playbackHold;
+  private final IdleLogoService idleLogo;
   private final AtomicLong sequence = new AtomicLong();
   private volatile boolean running;
   private Thread thread;
-  private String lastIdleMessage;
+  private Map<String, Object> lastScreen;
 
   /**
    * Crea el motor.
@@ -46,6 +49,8 @@ public class PlaybackEngine {
    * @param broadcaster difusión a la página local
    * @param browser control del navegador
    * @param status estado compartido
+   * @param playbackHold pausa durante el control remoto
+   * @param idleLogo logo de la pantalla sin programación
    */
   public PlaybackEngine(
       ManifestStore manifests,
@@ -53,13 +58,17 @@ public class PlaybackEngine {
       PlaylistExpander expander,
       PlaybackBroadcaster broadcaster,
       BrowserController browser,
-      PlayerStatus status) {
+      PlayerStatus status,
+      PlaybackHold playbackHold,
+      IdleLogoService idleLogo) {
     this.manifests = manifests;
     this.resolver = resolver;
     this.expander = expander;
     this.broadcaster = broadcaster;
     this.browser = browser;
     this.status = status;
+    this.playbackHold = playbackHold;
+    this.idleLogo = idleLogo;
   }
 
   /** Arranca el hilo de reproducción. */
@@ -87,16 +96,26 @@ public class PlaybackEngine {
     int index = 0;
     while (running) {
       try {
+        if (playbackHold.isHeld()) {
+          pause(POLL_MS);
+          continue;
+        }
+        PlayerPhase phase = status.phase();
+        if (phase == PlayerPhase.PAIRING || phase == PlayerPhase.SEARCHING_SERVER) {
+          screen(currentScreen(true));
+          pause(IDLE_MS);
+          continue;
+        }
         Optional<Manifest> current = manifests.current();
         if (current.isEmpty()) {
-          idle("Esperando programación");
+          screen(currentScreen(true));
           pause(IDLE_MS);
           continue;
         }
         Manifest manifest = current.get();
         Optional<String> playlistId = resolver.activePlaylistId(manifest, Instant.now());
         if (playlistId.isEmpty()) {
-          idle("Sin programación activa");
+          screen(currentScreen(false));
           pause(IDLE_MS);
           continue;
         }
@@ -109,7 +128,7 @@ public class PlaybackEngine {
           currentVersion = manifest.version();
         }
         if (slides.isEmpty()) {
-          idle("Playlist sin contenido reproducible");
+          screen(currentScreen(false));
           pause(IDLE_MS);
           continue;
         }
@@ -147,6 +166,13 @@ public class PlaybackEngine {
             : Long.MAX_VALUE;
     while (running && System.currentTimeMillis() < end) {
       pause(POLL_MS);
+      if (playbackHold.isHeld()) {
+        end += POLL_MS;
+        if (nextRefresh != Long.MAX_VALUE) {
+          nextRefresh += POLL_MS;
+        }
+        continue;
+      }
       Optional<Manifest> current = manifests.current();
       if (current.isEmpty() || current.get().version() != version) {
         return false;
@@ -180,19 +206,53 @@ public class PlaybackEngine {
         broadcaster.publish(event);
       }
     }
-    lastIdleMessage = null;
+    lastScreen = null;
     status.playing("PLAYING", playlistId, slide.assetId());
   }
 
-  private void idle(String fallback) {
-    String message = "RUNNING".equals(status.phase()) ? fallback : status.message();
-    if (message.equals(lastIdleMessage)) {
+  private void screen(Map<String, Object> event) {
+    if (event.equals(lastScreen)) {
       return;
     }
-    lastIdleMessage = message;
+    lastScreen = event;
     browser.ensurePlayer();
-    broadcaster.publish(Map.of("type", "IDLE", "message", message));
+    broadcaster.publish(event);
     status.playing("IDLE", null, null);
+  }
+
+  private Map<String, Object> currentScreen(boolean waitingForContent) {
+    Map<String, Object> event = new LinkedHashMap<>();
+    event.put("type", "SCREEN");
+    switch (status.phase()) {
+      case PAIRING -> {
+        event.put("screen", "PAIRING");
+        event.put("code", status.pairingCode());
+        event.put("server", status.serverUrl());
+        event.put("error", status.connectionError());
+      }
+      case SEARCHING_SERVER -> {
+        event.put("screen", "SEARCHING");
+        event.put("message", status.message());
+        event.put("error", status.connectionError());
+        event.put("retryAt", retryAtMillis());
+      }
+      case CONNECTING -> {
+        event.put("screen", waitingForContent ? "CONNECTING" : "LOGO");
+        event.put("logo", idleLogo.current());
+        event.put("server", status.serverUrl());
+        event.put("error", status.connectionError());
+        event.put("retryAt", retryAtMillis());
+      }
+      default -> {
+        event.put("screen", "LOGO");
+        event.put("logo", idleLogo.current());
+      }
+    }
+    return event;
+  }
+
+  private Long retryAtMillis() {
+    return status.retryAt() == null ? null : status.retryAt().toEpochMilli();
   }
 
   private void pause(long millis) throws InterruptedException {

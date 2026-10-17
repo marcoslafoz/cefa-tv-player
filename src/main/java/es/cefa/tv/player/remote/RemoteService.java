@@ -3,13 +3,17 @@ package es.cefa.tv.player.remote;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import es.cefa.tv.player.browser.CdpClient;
+import es.cefa.tv.player.playback.PlaybackHold;
 import es.cefa.tv.player.shared.config.PlayerProperties;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,11 +29,16 @@ public class RemoteService {
   private static final double FRAMES_PER_SECOND_SOURCE = 60.0;
   private static final long RESTART_DELAY_SECONDS = 2;
   private static final long VIEWPORT_TTL_MS = 2000;
-  private static final long IDLE_FRAME_MS = 2000;
+  private static final long IDLE_FRAME_MS = 250;
+  private static final long FRAME_FRESH_MS = 200;
+  private static final long INPUT_CAPTURE_DELAY_MS = 80;
+  private static final long CURSOR_INTERVAL_MS = 100;
 
   private final CdpClient cdp;
   private final PlayerProperties properties;
   private final InputMapper inputMapper;
+  private final PlaybackHold playbackHold;
+  private final AtomicBoolean captureQueued = new AtomicBoolean();
   private final ScheduledExecutorService scheduler =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
@@ -38,6 +47,9 @@ public class RemoteService {
             return thread;
           });
   private volatile Predicate<byte[]> frameSink = frame -> false;
+  private volatile Consumer<Object> messageSink = message -> {};
+  private volatile long lastCursorAt;
+  private volatile String lastCursor;
   private volatile boolean active;
   private volatile int fps = 5;
   private volatile int quality = 60;
@@ -54,10 +66,13 @@ public class RemoteService {
    * @param cdp cliente DevTools
    * @param properties configuración del reproductor
    * @param mapper serializador JSON
+   * @param playbackHold pausa de la reproducción durante la sesión
    */
-  public RemoteService(CdpClient cdp, PlayerProperties properties, ObjectMapper mapper) {
+  public RemoteService(
+      CdpClient cdp, PlayerProperties properties, ObjectMapper mapper, PlaybackHold playbackHold) {
     this.cdp = cdp;
     this.properties = properties;
+    this.playbackHold = playbackHold;
     this.inputMapper = new InputMapper(mapper);
     cdp.addEventListener(this::onCdpEvent);
   }
@@ -72,6 +87,15 @@ public class RemoteService {
   }
 
   /**
+   * Fija el destino de los mensajes de texto hacia el servidor, como el cursor.
+   *
+   * @param sink recibe cada mensaje serializable
+   */
+  public void setMessageSink(Consumer<Object> sink) {
+    this.messageSink = sink;
+  }
+
+  /**
    * Inicia la retransmisión.
    *
    * @param fps fotogramas por segundo deseados
@@ -83,6 +107,8 @@ public class RemoteService {
     this.quality = Math.max(10, Math.min(quality, 100));
     this.maxWidth = Math.max(320, maxWidth);
     this.active = true;
+    playbackHold.hold();
+    this.lastCursor = null;
     startScreencast();
     if (idleFrames != null) {
       idleFrames.cancel(false);
@@ -98,6 +124,7 @@ public class RemoteService {
       return;
     }
     active = false;
+    playbackHold.release();
     if (idleFrames != null) {
       idleFrames.cancel(false);
       idleFrames = null;
@@ -137,6 +164,49 @@ public class RemoteService {
         log.debug("Entrada remota no aplicada: {}", e.getMessage());
       }
     }
+    if ("MOUSE_MOVE".equals(input.path("kind").asText())) {
+      reportCursor(input.path("x").asDouble(0), input.path("y").asDouble(0));
+    } else {
+      queueCapture();
+    }
+  }
+
+  private void queueCapture() {
+    if (captureQueued.compareAndSet(false, true)) {
+      scheduler.schedule(
+          () -> {
+            captureQueued.set(false);
+            captureFrame(true);
+          },
+          INPUT_CAPTURE_DELAY_MS,
+          TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private void reportCursor(double x, double y) {
+    long now = System.currentTimeMillis();
+    if (now - lastCursorAt < CURSOR_INTERVAL_MS || !properties.chromium().enabled()) {
+      return;
+    }
+    lastCursorAt = now;
+    try {
+      var params = cdp.params();
+      params.put(
+          "expression",
+          CursorProbe.expression(
+              Math.max(0, Math.min(1, x)) * viewportWidth,
+              Math.max(0, Math.min(1, y)) * viewportHeight));
+      params.put("returnByValue", true);
+      String css =
+          CursorProbe.normalize(
+              cdp.call("Runtime.evaluate", params).path("result").path("value").asText(null));
+      if (!css.equals(lastCursor)) {
+        lastCursor = css;
+        messageSink.accept(Map.of("type", "CURSOR", "css", css));
+      }
+    } catch (IOException e) {
+      log.debug("No se pudo leer el cursor: {}", e.getMessage());
+    }
   }
 
   private void refreshViewport() {
@@ -174,10 +244,14 @@ public class RemoteService {
   }
 
   private void sendIdleFrame() {
+    captureFrame(false);
+  }
+
+  private void captureFrame(boolean force) {
     if (!active || !properties.chromium().enabled()) {
       return;
     }
-    if (System.currentTimeMillis() - lastFrameAt < IDLE_FRAME_MS) {
+    if (!force && System.currentTimeMillis() - lastFrameAt < FRAME_FRESH_MS) {
       return;
     }
     try {

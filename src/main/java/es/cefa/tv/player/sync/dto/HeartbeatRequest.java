@@ -18,6 +18,8 @@ import java.util.List;
  * @param error último error
  * @param system datos del equipo
  * @param displays pantallas detectadas
+ * @param playerVersion versión del reproductor
+ * @param playerBuild commit corto con el que se construyó la imagen
  */
 public record HeartbeatRequest(
     long appliedVersion,
@@ -30,4 +32,6 @@ public record HeartbeatRequest(
     String ip,
     String error,
     SystemInfo system,
-    List<DisplayOutput> displays) {}
+    List<DisplayOutput> displays,
+    String playerVersion,
+    String playerBuild) {}
