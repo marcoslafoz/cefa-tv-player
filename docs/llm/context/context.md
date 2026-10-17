@@ -2,7 +2,7 @@
 
 ## Qué es
 
-Receptor de CEFA TV. Es una aplicación Spring Boot que se ejecuta en Docker en cada pantalla, se registra en el emisor con una clave, descarga la programación y la reproduce a pantalla completa en Chromium en modo kiosco.
+Receptor de CEFA TV. Es una aplicación Spring Boot que se ejecuta en Docker en cada pantalla, se empareja con el emisor mediante un código que muestra en pantalla, descarga la programación y la reproduce a pantalla completa en Chromium en modo kiosco.
 
 ## Por qué existe
 
@@ -14,7 +14,7 @@ Técnicos de CEFA que instalan pantallas. El contenido lo gestiona el equipo que
 
 ## Qué resuelve
 
-- Instalación con un script que solo pide la clave de alta.
+- Instalación con un script; el reproductor muestra un código de emparejamiento que se introduce en el servidor.
 - Descubrimiento automático del servidor en la red local.
 - Reproducción sin conexión: guarda programación y ficheros en disco y decide con su reloj local.
 - Recuperación de programaciones enviadas mientras estaba desconectado.
