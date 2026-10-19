@@ -33,8 +33,8 @@ Se parte de un Debian recién instalado, sin nada más.
 2. **Descargar el repositorio.** El repositorio es público:
 
    ```bash
-   git clone https://github.com/marcoslafoz/cefatv-player.git
-   cd cefatv-player
+   git clone ssh://git@git.cefa.es:2222/it/cefa-tv-player.git
+   cd cefa-tv-player
    ```
 
 3. **Ejecutar el instalador.** Si el servidor y la pantalla están en la misma red local, basta con:
@@ -117,7 +117,7 @@ El reproductor elige la primera salida de vídeo conectada y adapta la resoluci�
 Desde el repositorio clonado:
 
 ```bash
-cd cefatv-player
+cd cefa-tv-player
 sudo ./update.sh
 ```
 
@@ -128,7 +128,7 @@ Opciones: `--image IMAGEN` (descarga una imagen de un registro en vez de constru
 ## 7. Desinstalar
 
 ```bash
-cd cefatv-player
+cd cefa-tv-player
 sudo ./uninstall.sh
 ```
 
@@ -181,13 +181,13 @@ La instalación se probó el 16 de octubre de 2026 sobre una imagen oficial `deb
 
    ```bash
    docker exec debian-player sh -c 'apt-get update -qq && apt-get install -y -qq git ca-certificates'
-   docker exec debian-player sh -c 'cp -a /src /root/cefatv-player'
+   docker exec debian-player sh -c 'cp -a /src /root/cefa-tv-player'
    ```
 
 3. **Primera ejecución del instalador.** Instaló `curl` y Docker (versión 29.9.1) con el script oficial y terminó con el aviso `El demonio de Docker no responde`. Es lo esperado en este contenedor, que no tiene `systemd` para arrancar Docker. En un Debian real, `systemd` lo arranca y este paso no ocurre.
 
    ```bash
-   docker exec debian-player sh -c 'cd /root/cefatv-player && ./install.sh --yes --mode headless --server http://host.docker.internal:8080'
+   docker exec debian-player sh -c 'cd /root/cefa-tv-player && ./install.sh --yes --mode headless --server http://host.docker.internal:8080'
    ```
 
 4. **Arrancar Docker a mano** (solo por no haber `systemd`):
