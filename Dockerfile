@@ -49,8 +49,9 @@ WORKDIR /app
 COPY --from=builder /app/target/app.jar app.jar
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY docker/cefa-tv-kiosk /usr/local/bin/cefa-tv-kiosk
 COPY docker/chromium/cefa-tv.json /etc/chromium/policies/managed/cefa-tv.json
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh && mkdir -p /data
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/cefa-tv-kiosk && mkdir -p /data
 
 ENV CEFA_TV_DATA_DIR=/data
 ENV DISPLAY_MODE=headless

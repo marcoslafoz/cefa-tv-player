@@ -117,4 +117,15 @@ class ChromiumLauncherTest {
     assertThat(profile.resolve("SingletonLock")).doesNotExist();
     assertThat(profile.resolve("Default/Cookies")).exists();
   }
+
+  @Test
+  void pausingAndResumingTogglesTheState() {
+    assertThat(launcher.isPaused()).isFalse();
+
+    launcher.pause();
+    assertThat(launcher.isPaused()).isTrue();
+
+    launcher.resume();
+    assertThat(launcher.isPaused()).isFalse();
+  }
 }

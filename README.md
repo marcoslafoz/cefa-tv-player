@@ -115,6 +115,12 @@ El servidor retransmite la pantalla de Chromium (screencast por DevTools) y apli
 
 En cada latido y, con el WebSocket abierto, cada 15 segundos (`TELEMETRY`) el reproductor envía datos del equipo (CPU, memoria, disco, temperatura, IP, MAC, versiones, tiempo de actividad) y las pantallas detectadas. Se leen de `/proc`, `/sys` y la JVM, sin dependencias adicionales. Lo que no se pueda calcular se envía como `null`. Cada reproductor informa su versión (`playerVersion`, la del `pom.xml` sin `-SNAPSHOT`) y su build (`playerBuild`, el commit corto de git con el que se construyó la imagen, `unknown` si no había git) en el emparejamiento, el latido, la telemetría, `/api/status` y la página de estado local.
 
+## Modo mantenimiento
+
+Con el teclado conectado al equipo, **Ctrl+Shift+M** cierra el kiosco (también si la pantalla muestra una web externa) y deja de reabrirlo, para poder trabajar en el equipo aunque no tenga red. El atajo se instala en Chromium por CDP, así que funciona sin conexión con el servidor.
+
+Para volver al kiosco, ejecuta en el anfitrión `docker exec cefa-tv-player cefa-tv-kiosk` (o `cefa-tv-kiosk` desde una terminal del contenedor). Si no se hace, el kiosco se reabre solo a los 15 minutos. El estado se consulta en `http://127.0.0.1:8081/maintenance`, solo accesible desde el propio equipo.
+
 ## Terminal remota
 
 Un administrador del servidor puede abrir una terminal en el reproductor. No hay demonio SSH ni puertos abiertos: la sesión viaja por el WebSocket saliente que el reproductor ya mantiene y usa un pseudoterminal (`pty4j`). Solo hay una sesión a la vez y se corta si cae la conexión con el servidor.

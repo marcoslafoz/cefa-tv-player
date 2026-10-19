@@ -15,12 +15,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/** Lanza Chromium en modo kiosco y lo vuelve a arrancar si se cierra o falla. */
+/**
+ * Lanza Chromium en modo kiosco y lo vuelve a arrancar si se cierra o falla, salvo que esté pausado
+ * por el modo mantenimiento.
+ */
 @Slf4j
 @Component
 public class ChromiumLauncher {
 
   private static final long RESTART_DELAY_MS = 3000;
+  private static final long PAUSE_POLL_MS = 500;
   private static final List<String> KIOSK_FLAGS =
       List.of(
           "--kiosk",
@@ -64,6 +68,7 @@ public class ChromiumLauncher {
   private final BrowserController browser;
   private final DisplayService display;
   private volatile boolean running;
+  private volatile boolean paused;
   private volatile Process process;
   private Thread supervisor;
 
@@ -124,6 +129,26 @@ public class ChromiumLauncher {
     }
   }
 
+  /** Cierra el navegador y evita que se relance hasta llamar a {@link #resume()}. */
+  public void pause() {
+    paused = true;
+    restartBrowser();
+  }
+
+  /** Permite que el supervisor vuelva a abrir el navegador en modo kiosco. */
+  public void resume() {
+    paused = false;
+  }
+
+  /**
+   * Indica si el navegador está pausado.
+   *
+   * @return {@code true} mientras no se relanza
+   */
+  public boolean isPaused() {
+    return paused;
+  }
+
   List<String> command() {
     PlayerProperties.Chromium chromium = properties.chromium();
     List<String> command = new ArrayList<>();
@@ -147,6 +172,15 @@ public class ChromiumLauncher {
 
   private void supervise() {
     while (running) {
+      if (paused) {
+        try {
+          Thread.sleep(PAUSE_POLL_MS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          return;
+        }
+        continue;
+      }
       try {
         cleanProfile();
         process =
