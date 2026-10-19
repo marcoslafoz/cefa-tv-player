@@ -12,7 +12,7 @@ Este repositorio es **CEFA TV Player**. Antes de trabajar en cualquier tarea, le
 
 # Notion
 
-Este proyecto tiene su carpeta en Notion (`CEFA Informática / Projects / CEFA TV Player`), con un Kanban de tareas y la Documentación. Notion es la fuente de verdad para las tareas: antes de empezar a trabajar consulta el Kanban, y al terminar actualiza el estado de la tarea. Las normas completas están en [`notion.md`](docs/llm/rules/common/notion.md) y los enlaces del proyecto en la sección "Notion" de [`reference-data.md`](docs/llm/context/reference-data.md).
+Este proyecto tiene su carpeta en Notion (`CEFA Informática / Projects / CEFA TV`), con un Kanban de tareas y la Documentación. Notion es la fuente de verdad para las tareas: antes de empezar a trabajar consulta el Kanban, y al terminar actualiza el estado de la tarea. Las normas completas están en [`notion.md`](docs/llm/rules/common/notion.md) y los enlaces del proyecto en la sección "Notion" de [`reference-data.md`](docs/llm/context/reference-data.md).
 
 # Reglas
 
