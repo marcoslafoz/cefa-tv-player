@@ -223,6 +223,31 @@ Navegador a servidor (`/ws/remote`): `START`, `STOP` e `INPUT`; el servidor los 
 
 Ligera y bajo demanda. El navegador abre `/ws/previews` (permiso `PLAYER_VIEW`, solo reproductores visibles) y envía `SUBSCRIBE {playerIds[] (máx. 48), intervalSec (5..60, 10 por defecto)}` y `UNSUBSCRIBE {playerIds[]}`; renovar el `SUBSCRIBE` mantiene la suscripción (30 s sin renovar o cerrar el WebSocket la da de baja). El servidor cuenta los suscriptores por reproductor: al primero le envía `PREVIEW_START {intervalSec, maxWidth:320, quality:45}` y al último `PREVIEW_STOP`. Mientras está activo, el reproductor captura una miniatura por intervalo (`Page.captureScreenshot` con `clip` y `scale`), omite el envío si la imagen es idéntica a la anterior (salvo un latido cada 60 s), no captura durante una sesión remota y limita cada fotograma a unos 25 KB. El servidor guarda solo el último fotograma por reproductor y lo reenvía a los suscriptores como mensaje binario: 36 bytes ASCII con el `playerId` (UUID) seguidos de los bytes del JPEG. Sin suscriptores no viaja nada.
 
+## Reproductores Aracast
+
+Un player Aracast (caja Linux de Aranova, `AraCastPlayer` 2.6 o 4.0) se da de alta como un `Player` más (`players.kind = ARACAST`, datos de conexión en `aracast_players`) y se gestiona igual que un reproductor de CEFA TV. A diferencia de este, no descarga nada: el servidor empuja la programación por la red del player (comandos JSON por TCP 5401, FTP 5481 y SSH).
+
+- **Entrega.** `ManifestService` calcula la versión como siempre. `AracastDeliveryService` la traduce con `AracastPlanner` y la publica con `AracastPublisher`; después marca la entrega (`APPLIED` o `FAILED`) y `appliedVersion`. Si el player no responde la versión queda en cola y se reintenta cada 30 s; cada hora se recalcula la ventana de siete días.
+- **Traducción.** Las prioridades y los rangos de fechas se resuelven en el servidor con la misma regla que el reproductor (gana la programación activa de mayor prioridad y, en empate, la que empezó más tarde) para los próximos siete días; los eventos iguales se agrupan por día de la semana en un `events.ics` con `RRULE`. Cada playlist es una plantilla (`Texture`, `Slideshow`, `Video` o `HTML5`); una playlist mixta o con duraciones distintas se expande como un ciclo de plantillas dentro de cada franja. Un día termina a las 23:59:30, como en la aplicación de escritorio. Si no hay eventos se deja la plantilla `basic_json` (el logo).
+- **Nombres.** El player usa los nombres de plantilla como patrones, así que se sanean (solo letras, números, espacios, guion y guion bajo) y llevan al final la marca `~ctv-<ocho caracteres del id de la playlist>[-<paso>]`, que permite reconocer y borrar las que ya no se usan. Los contenidos se guardan como `<nombre>_<sha1>.<ext>`.
+- **Sobrescribir al momento.** Tras publicar se ejecuta `Template.changeTemplate` con la plantilla que toca ahora si el player muestra otra o si la que muestra se ha sustituido, de modo que una programación actualizada reemplaza a la que se está emitiendo sin esperar al siguiente cambio del calendario.
+- **Estado.** `AracastHealthMonitor` consulta cada 30 s a los Aracast (versión, MAC, zona horaria, disco, plantilla en emisión) y mantiene `lastSeenAt`, el estado `PLAYING` o `IDLE` y la playlist y el medio en emisión.
+- **Mismo protocolo hacia el navegador.** `AracastBridge` implementa `VirtualPlayerBridge` y `PlayerSessionRegistry` le entrega los mensajes `REMOTE_START`, `REMOTE_STOP`, `INPUT` y `SHELL_*` de un Aracast como si fuera un reproductor con WebSocket: la pantalla en vivo y el teclado y ratón se hacen por SSH (`ffmpeg x11grab` y XTest), la terminal es un shell con PTY y la vista previa captura una miniatura mientras alguien la mira (`PreviewDemandEvent`). El `RESTART` reinicia el equipo; `RELOAD` y las órdenes de pantalla no existen en un Aracast.
+- **Credenciales.** Cada Aracast puede tener contraseña SSH y FTP propias, guardadas cifradas con AES-256-GCM (`ARACAST_SECRET_KEY`, o el secreto de sesión). Al guardar una SSH se valida contra el player y, si no se indica FTP, se lee de `/root/.aracast/data/custom.cfg`. `ARACAST_SSH_PASSWORDS` y `ARACAST_FTP_PASSWORD` son el respaldo común.
+
+| Método y ruta | Función |
+|---|---|
+| `GET /players/aracast/probe?host=` | Consulta un player sin darlo de alta. 422 `ARACAST_UNREACHABLE` o `ARACAST_INVALID_RESPONSE`. |
+| `POST /players/aracast` `{host,name?,description?,groupId?,siteId?,sshPassword?,ftpPassword?}` | Alta. 409 `ARACAST_EXISTS`; 422 `ARACAST_SSH_AUTH_FAILED` si el player rechaza la contraseña. |
+| `GET /players/aracast/{id}` | Datos de conexión; indica si hay contraseñas propias, nunca las devuelve. |
+| `PUT /players/aracast/{id}/credentials` `{sshPassword?,ftpPassword?}` | Cambia las contraseñas (nulo no cambia, vacío vuelve a las globales). |
+| `GET /players/{id}/aracast/clock`, `POST` `{mode:SERVER\|NTP,server?}` | Hora del player y sincronización. |
+| `GET /players/{id}/aracast/network`, `PUT` `{hostname,ip,netmask,gateway,dnsPrimary,dnsSecondary?,reboot}` | Red del player; solo administradores. Cambiar la dirección reinicia el equipo. |
+| `POST /sites/{siteId}/aracast/discover` | Barre los rangos de la sede (UDP 30333) y devuelve lo encontrado, si ya está registrado y los Aracast de la sede que no responden. 422 `SITE_WITHOUT_RANGES`. |
+| `GET /players/install` | Comando de instalación del reproductor con la URL de `PLAYER_REPO_URL`. |
+
+Variables propias: `PLAYER_REPO_URL`, `ARACAST_SSH_PASSWORDS`, `ARACAST_FTP_PASSWORD`, `ARACAST_SECRET_KEY`, `ARACAST_NTP_SERVERS`, `ARACAST_COMMAND_PORT`, `ARACAST_FTP_PORT`, `ARACAST_DISCOVERY_PORT`. Las sedes ganan `ipRanges` (CIDR, intervalo o IP suelta) para el descubrimiento.
+
 ## Descubrimiento
 
 El sidecar `cefa-tv-discovery` (socat en red host, UDP `47808`) responde a la petición `CEFATV_DISCOVER 1` con una línea JSON `{"service":"cefa-tv","version":1,"apiUrl":"http://<ip-del-servidor>:8080"}`, calculando la IP con `ip route get <ip del cliente>`. El reproductor envía el broadcast a `255.255.255.255:47808` y a la dirección de broadcast de cada interfaz, espera 3 s, reintenta con espera creciente y valida la respuesta con `GET {apiUrl}/api/v1/public/info`. El contenedor del reproductor usa red host para que el broadcast salga a la LAN.
