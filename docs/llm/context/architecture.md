@@ -2,7 +2,7 @@
 
 CEFA TV es un sistema de señalización digital (similar a Xibo o Aracast) formado por dos repositorios:
 
-- `cefa-tv-server` — emisor: backend Spring Boot (`cefa-tv-core`), frontend Next.js (`cefa-tv-app`), PostgreSQL y MinIO.
+- `cefa-tv-server` — emisor: backend Spring Boot (`cefa-tv-core`), frontend Next.js (`cefa-tv-app`), PostgreSQL y Garage (almacenamiento S3).
 - `cefa-tv-player` — receptor: aplicación Spring Boot en Docker que se instala con un script, reproduce en pantalla completa y se controla en remoto.
 
 Este documento es el contrato entre ambos. Existe una copia idéntica en los dos repositorios (`docs/llm/context/architecture.md`): cualquier cambio se aplica en las dos.
@@ -23,18 +23,18 @@ Este documento es el contrato entre ambos. Existe una copia idéntica en los dos
 ```
 cefa-tv-server/
 ├── cefa-tv-core/        Spring Boot 3.4, Java 21, paquete es.cefa.tv.core
-│   ├── compose.yml      postgres + minio + core + discovery
+│   ├── compose.yml      postgres + garage + core + discovery
 │   └── discovery/       sidecar de descubrimiento (socat, red host)
 ├── cefa-tv-app/         Next.js 16, React 19, pnpm, i18n es/en/pl
 │   └── compose.yml      app + nginx (proxy a /core-api, WebSocket y subidas grandes)
 └── Makefile             orquestador (delega en core y app)
 ```
 
-Puertos por defecto: `4000` interfaz web (nginx), `8080` API del core (los reproductores se conectan aquí), `9000` API de MinIO, `9001` consola de MinIO, `47808/udp` descubrimiento.
+Puertos por defecto: `4000` interfaz web (nginx), `8080` API del core (los reproductores se conectan aquí), `3900` API S3 de Garage (solo en `127.0.0.1` por defecto), `47808/udp` descubrimiento.
 
 Variables del core (`cefa-tv-core/.env`, no versionado; plantilla en `.env.template`):
 
-- Base de datos y almacenamiento: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` (por defecto `cefa-tv-media`).
+- Base de datos y almacenamiento: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `S3_ENDPOINT`, `S3_ACCESS_KEY` (`GK` + 24 hex), `S3_SECRET_KEY` (64 hex), `S3_BUCKET` (por defecto `cefa-tv-media`), `S3_REGION` (por defecto `garage`) y `GARAGE_RPC_SECRET` (64 hex).
 - Sesión y administrador inicial: `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (crean el primer administrador si no hay usuarios), `PUBLIC_URL` (URL del core visible por los reproductores, opcional), `APP_BASE_URL` (URL pública de la interfaz).
 - Microsoft Entra ID: `AZURE_TENANT_ID` (GUID del directorio; se rechazan `common`, `organizations` y los dominios), `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_REDIRECT_URI` (debe ser exactamente `<URL pública>/core-api/login/oauth2/code/azure`), `MICROSOFT_AUTO_PROVISION` (por defecto `false`), `MICROSOFT_DEFAULT_GROUP_ID` (opcional). El inicio de sesión con Microsoft queda apagado mientras falten estos valores.
 
