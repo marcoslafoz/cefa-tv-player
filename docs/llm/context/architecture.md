@@ -196,7 +196,7 @@ Un reproductor dado de baja y desconectado recibe 401 `INVALID_DEVICE_TOKEN` en 
 
 ## WebSocket
 
-`/ws/player?token=<deviceToken>` (reproductor), `/ws/remote/{playerId}`, `/ws/shell/{playerId}` y `/ws/previews` (navegador, cookie de sesión). Mensajes de texto JSON con campo `type`; los fotogramas del control remoto son mensajes binarios con los bytes de un JPEG.
+`/ws/player?token=<deviceToken>` (reproductor), `/ws/remote/{playerId}`, `/ws/shell/{playerId}` y `/ws/previews` (navegador, cookie de sesión). Mensajes de texto JSON con campo `type`; los fotogramas del control remoto son mensajes binarios con los bytes de un JPEG. El nginx de la app no reenvía `Sec-WebSocket-Extensions` al core, así que los WebSocket van sin compresión `permessage-deflate` (los JPEG ya van comprimidos).
 
 Servidor a reproductor, tras `HELLO` en este orden: `CONFIG {preferredOutput, idleLogo}`, `SYNC` (si hay una versión nueva) y `PREVIEW_START` (si hay observadores). Además: `REMOTE_START {fps, quality, maxWidth}`, `REMOTE_STOP`, `INPUT`, `RELOAD`, `RESTART`, `UNENROLL`, `DISPLAY_REDETECT`, `SET_RESOLUTION {output,width,height}`, `PREVIEW_START {intervalSec, maxWidth, quality}`, `PREVIEW_STOP` y los mensajes `SHELL_*`.
 Reproductor a servidor: `HELLO {appliedVersion}` (primer mensaje), binarios JPEG mientras haya sesión remota, `STATE {state, currentPlaylistId, currentAssetId}`, `TELEMETRY {system, displays}`, `CURSOR {css}`, `PREVIEW_FRAME {w, h, jpegBase64, at}` y los mensajes `SHELL_*`.
