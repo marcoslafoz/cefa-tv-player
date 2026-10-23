@@ -27,6 +27,7 @@ public class PlaybackController {
   private final FileStore files;
   private final ManifestStore manifests;
   private final PlayerStatus status;
+  private final VolumeService volume;
 
   /**
    * Crea el controlador.
@@ -35,16 +36,19 @@ public class PlaybackController {
    * @param files almacén de ficheros
    * @param manifests manifest aplicado
    * @param status estado compartido
+   * @param volume volumen de los vídeos
    */
   public PlaybackController(
       PlaybackBroadcaster broadcaster,
       FileStore files,
       ManifestStore manifests,
-      PlayerStatus status) {
+      PlayerStatus status,
+      VolumeService volume) {
     this.broadcaster = broadcaster;
     this.files = files;
     this.manifests = manifests;
     this.status = status;
+    this.volume = volume;
   }
 
   /**
@@ -66,6 +70,18 @@ public class PlaybackController {
   @ResponseBody
   public SseEmitter events() {
     return broadcaster.subscribe();
+  }
+
+  /**
+   * Volumen vigente de los vídeos, que la página consulta al conectarse por si cambió mientras
+   * estaba desconectada.
+   *
+   * @return volumen de 0 a 100
+   */
+  @GetMapping("/player/volume")
+  @ResponseBody
+  public Map<String, Integer> volume() {
+    return Map.of("volume", volume.current());
   }
 
   /**

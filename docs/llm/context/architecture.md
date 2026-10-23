@@ -189,7 +189,7 @@ No hay roles. Un **usuario** pertenece a cero o más **grupos de usuarios** y re
 | `GET /player-api/manifest` | Manifest actual, con `Content-Encoding: gzip` y `ETag: "<version>"` (acepta `If-None-Match`, 304). |
 | `POST /player-api/files` `{sha256:[...]}` | Devuelve un `application/zip` con una entrada por `sha256` pedido (DEFLATED con nivel 0 para formatos ya comprimidos). |
 | `GET /player-api/files/{sha256}` | Descarga directa con soporte de `Range` y `ETag`; para ficheros grandes. |
-| `POST /player-api/heartbeat` `{appliedVersion,downloadingVersion,state,currentPlaylistId,currentAssetId,diskFreeMb,uptimeSec,ip,error,system,displays}` | Actualiza el estado; devuelve `{desiredVersion, commands:[{type, output?, width?, height?}], config:{preferredOutput, idleLogo}}`. `commands` pendientes: `RELOAD`, `RESTART`, `UNENROLL`, `DISPLAY_REDETECT`, `SET_RESOLUTION`. |
+| `POST /player-api/heartbeat` `{appliedVersion,downloadingVersion,state,currentPlaylistId,currentAssetId,diskFreeMb,uptimeSec,ip,error,system,displays}` | Actualiza el estado; devuelve `{desiredVersion, commands:[{type, output?, width?, height?}], config:{preferredOutput, idleLogo, volume}}`. `commands` pendientes: `RELOAD`, `RESTART`, `UNENROLL`, `DISPLAY_REDETECT`, `SET_RESOLUTION`. |
 | `POST /player-api/ack` `{version,status:APPLIED\|FAILED,error}` | Confirma la aplicación de una versión. |
 
 Un reproductor dado de baja y desconectado recibe 401 `INVALID_DEVICE_TOKEN` en su siguiente llamada; uno desactivado, 403 `PLAYER_DISABLED`. El reproductor trata el 401 como baja: borra su estado y vuelve a pedir un código de emparejamiento.
@@ -198,7 +198,7 @@ Un reproductor dado de baja y desconectado recibe 401 `INVALID_DEVICE_TOKEN` en 
 
 `/ws/player?token=<deviceToken>` (reproductor), `/ws/remote/{playerId}`, `/ws/shell/{playerId}` y `/ws/previews` (navegador, cookie de sesión). Mensajes de texto JSON con campo `type`; los fotogramas del control remoto son mensajes binarios con los bytes de un JPEG.
 
-Servidor a reproductor, tras `HELLO` en este orden: `CONFIG {preferredOutput, idleLogo}`, `SYNC` (si hay una versión nueva) y `PREVIEW_START` (si hay observadores). Además: `REMOTE_START {fps, quality, maxWidth}`, `REMOTE_STOP`, `INPUT`, `RELOAD`, `RESTART`, `UNENROLL`, `DISPLAY_REDETECT`, `SET_RESOLUTION {output,width,height}`, `PREVIEW_START {intervalSec, maxWidth, quality}`, `PREVIEW_STOP` y los mensajes `SHELL_*`.
+Servidor a reproductor, tras `HELLO` en este orden: `CONFIG {preferredOutput, idleLogo, volume}`, `SYNC` (si hay una versión nueva) y `PREVIEW_START` (si hay observadores). Además: `REMOTE_START {fps, quality, maxWidth}`, `REMOTE_STOP`, `INPUT`, `RELOAD`, `RESTART`, `UNENROLL`, `DISPLAY_REDETECT`, `SET_RESOLUTION {output,width,height}`, `PREVIEW_START {intervalSec, maxWidth, quality}`, `PREVIEW_STOP` y los mensajes `SHELL_*`.
 Reproductor a servidor: `HELLO {appliedVersion}` (primer mensaje), binarios JPEG mientras haya sesión remota, `STATE {state, currentPlaylistId, currentAssetId}`, `TELEMETRY {system, displays}`, `CURSOR {css}`, `PREVIEW_FRAME {w, h, jpegBase64, at}` y los mensajes `SHELL_*`.
 Navegador a servidor (`/ws/remote`): `START`, `STOP` e `INPUT`; el servidor los retransmite al reproductor y reenvía al navegador los fotogramas, el `CURSOR` y un `STATE {online}`.
 
@@ -298,6 +298,7 @@ La pantalla sin programación muestra un logo blanco sobre fondo oscuro: `CEFA` 
 
 - El reproductor detecta las salidas de vídeo con `xrandr --query` (modo `host` y `xorg`) y elige la salida preferida si está conectada; si no, la primera conectada (la marcada como primaria si la hay). Fuerza su modo preferido (`xrandr --output X --auto`) para adaptar la resolución y coloca Chromium en kiosco exactamente sobre esa salida (`--window-position`, `--window-size`). El resto de salidas no se tocan.
 - La salida preferida (`preferredOutput`, `null` = automática) llega por `config` del heartbeat y por el mensaje `CONFIG`, se guarda en `/data/display.json` y sobrevive a reinicios sin servidor. Si la salida no está conectada, usa la automática y lo anota en `lastError` ("Salida X no disponible, usando Y"); vuelve a la preferida cuando aparece.
+- El volumen (`volume`, entero de 0 a 100, 100 por defecto o si falta) llega por `config` del heartbeat y por el mensaje `CONFIG`, se guarda en `/data/volume.json` y sobrevive a reinicios sin servidor. Se aplica al elemento de vídeo de la página `/player` en caliente (`HTMLMediaElement.volume`, sin tocar el volumen del sistema): un elemento `muted` en el manifest sigue en silencio y el volumen solo escala los que tienen sonido.
 - Cada 10 s comprueba si cambió la salida elegida (monitor desenchufado, enchufado, otra resolución). Si cambia, vuelve a elegir, ajusta la resolución, recoloca Chromium y avisa al servidor. En `headless` informa de la pantalla virtual de Xvfb.
 - `DISPLAY_REDETECT` y `SET_RESOLUTION {output, width, height}` llegan por `commands` del heartbeat y por WebSocket. Un modo inexistente se rechaza y se informa en `lastError`; se aceptan modos con sufijo de refresco (`1280x720_60.00`).
 

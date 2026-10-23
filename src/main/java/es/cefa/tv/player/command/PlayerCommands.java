@@ -6,6 +6,7 @@ import es.cefa.tv.player.display.DisplayService;
 import es.cefa.tv.player.pairing.StateStore;
 import es.cefa.tv.player.pairing.UnenrolledEvent;
 import es.cefa.tv.player.playback.IdleLogoService;
+import es.cefa.tv.player.playback.VolumeService;
 import es.cefa.tv.player.preview.PreviewService;
 import es.cefa.tv.player.remote.RemoteService;
 import es.cefa.tv.player.shell.ShellService;
@@ -36,6 +37,7 @@ public class PlayerCommands {
   private final RemoteService remote;
   private final PreviewService preview;
   private final IdleLogoService idleLogo;
+  private final VolumeService volume;
   private final SyncService sync;
   private final BrowserController browser;
   private final StateStore state;
@@ -61,6 +63,7 @@ public class PlayerCommands {
    * @param remote control remoto
    * @param preview vista previa ligera
    * @param idleLogo logo de la pantalla sin programación
+   * @param volume volumen de los vídeos
    * @param sync sincronización
    * @param browser control del navegador
    * @param state estado de alta
@@ -77,6 +80,7 @@ public class PlayerCommands {
       RemoteService remote,
       PreviewService preview,
       IdleLogoService idleLogo,
+      VolumeService volume,
       SyncService sync,
       BrowserController browser,
       StateStore state,
@@ -91,6 +95,7 @@ public class PlayerCommands {
     this.remote = remote;
     this.preview = preview;
     this.idleLogo = idleLogo;
+    this.volume = volume;
     this.sync = sync;
     this.browser = browser;
     this.state = state;
@@ -196,6 +201,19 @@ public class PlayerCommands {
       JsonNode logo = message.get("idleLogo");
       applyIdleLogo(logo.isNull() ? null : logo.asText());
     }
+    if (message.has("volume")) {
+      JsonNode level = message.get("volume");
+      applyVolume(level.isNumber() ? level.asInt() : null);
+    }
+  }
+
+  /**
+   * Aplica el volumen de los vídeos que fija el servidor.
+   *
+   * @param level volumen de 0 a 100; nulo equivale a 100
+   */
+  public void applyVolume(Integer level) {
+    volume.set(level);
   }
 
   /**

@@ -18,9 +18,10 @@ public record HeartbeatResponse(long desiredVersion, List<Command> commands, Con
    *
    * @param preferredOutput salida de vídeo preferida, nula para la selección automática
    * @param idleLogo logo efectivo de la pantalla sin programación, {@code CEFA} o {@code ALGONTEC}
+   * @param volume volumen de los vídeos de 0 a 100, nulo si el servidor no lo envía (equivale a 100)
    */
   @JsonIgnoreProperties(ignoreUnknown = true)
-  public record Config(String preferredOutput, String idleLogo) {}
+  public record Config(String preferredOutput, String idleLogo, Integer volume) {}
 
   /**
    * Orden pendiente.

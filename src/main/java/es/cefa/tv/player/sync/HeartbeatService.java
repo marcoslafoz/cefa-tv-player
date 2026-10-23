@@ -184,6 +184,7 @@ public class HeartbeatService {
         if (response.config().idleLogo() != null) {
           commands.applyIdleLogo(response.config().idleLogo());
         }
+        commands.applyVolume(response.config().volume());
       }
       response
           .commandsOrEmpty()

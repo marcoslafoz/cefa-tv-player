@@ -33,6 +33,21 @@ class HeartbeatResponseTest {
   }
 
   @Test
+  void readsTheVolumeFromTheConfigAndLeavesItNullWhenAbsent() throws Exception {
+    HeartbeatResponse withVolume =
+        mapper.readValue(
+            "{\"desiredVersion\":3,\"config\":{\"preferredOutput\":null,\"volume\":40}}",
+            HeartbeatResponse.class);
+    HeartbeatResponse oldServer =
+        mapper.readValue(
+            "{\"desiredVersion\":3,\"config\":{\"preferredOutput\":null}}",
+            HeartbeatResponse.class);
+
+    assertThat(withVolume.config().volume()).isEqualTo(40);
+    assertThat(oldServer.config().volume()).isNull();
+  }
+
+  @Test
   void distinguishesAutomaticSelectionFromAnAbsentConfig() throws Exception {
     HeartbeatResponse automatic =
         mapper.readValue(

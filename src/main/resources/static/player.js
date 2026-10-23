@@ -12,6 +12,7 @@
     ALGONTEC: { src: '/brand/algontec-logo-white.svg', alt: 'Algontec' }
   }
   var idleLogo = 'CEFA'
+  var volume = 1
   Object.keys(logos).forEach(function (key) {
     new Image().src = logos[key].src
   })
@@ -60,6 +61,27 @@
       logoImage.setAttribute('src', logo.src)
       logoImage.setAttribute('alt', logo.alt)
     }
+  }
+
+  function setVolume(level) {
+    var parsed = Number(level)
+    volume = isNaN(parsed) ? 1 : Math.max(0, Math.min(100, parsed)) / 100
+    layers.forEach(function (layer) {
+      layer.querySelectorAll('video').forEach(function (video) {
+        video.volume = volume
+      })
+    })
+  }
+
+  function loadVolume() {
+    fetch('/player/volume', { cache: 'no-store' })
+      .then(function (response) {
+        return response.json()
+      })
+      .then(function (body) {
+        setVolume(body.volume)
+      })
+      .catch(function () {})
   }
 
   function showScreen(event) {
@@ -127,6 +149,7 @@
       var video = document.createElement('video')
       video.src = event.src
       video.muted = event.muted !== false
+      video.volume = volume
       video.loop = true
       video.autoplay = true
       video.playsInline = true
@@ -150,13 +173,19 @@
     } else if (event.type === 'SCREEN') {
       showScreen(event)
     } else if (event.type === 'CONFIG') {
-      idleLogo = normalizeLogo(event.idleLogo)
-      renderLogo(screen.getAttribute('data-screen'))
+      if ('idleLogo' in event) {
+        idleLogo = normalizeLogo(event.idleLogo)
+        renderLogo(screen.getAttribute('data-screen'))
+      }
+      if ('volume' in event) {
+        setVolume(event.volume)
+      }
     }
   }
 
   function connect() {
     var source = new EventSource('/player/events')
+    source.onopen = loadVolume
     source.onmessage = function (message) {
       try {
         handle(JSON.parse(message.data))

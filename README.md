@@ -103,6 +103,10 @@ El servidor también puede fijar una salida preferida (`config.preferredOutput` 
 
 El servidor envía el logo efectivo (`CEFA` o `ALGONTEC`) en `config.idleLogo` del latido y en el mensaje `CONFIG`. Se guarda en `/data/idle-logo.json`, se informa en `system.idleLogo` y en `/api/status`, y la página `/player` cambia de logo en vivo por SSE sin recargarse. Un valor desconocido equivale a `CEFA`, y las pantallas de emparejamiento y conexión siempre muestran el logo de CEFA. Ambos logos se dibujan dentro de un recuadro de como máximo el 30 % del alto y el 60 % del ancho, centrados y sin deformarse.
 
+## Volumen
+
+El servidor envía el volumen de los vídeos (`volume`, entero de 0 a 100) en `config.volume` del latido y en el mensaje `CONFIG {preferredOutput, idleLogo, volume}`; si falta (servidor antiguo) se usa 100. Se guarda en `/data/volume.json`, se informa en `/api/status` y la página `/player` lo aplica en vivo por SSE al elemento de vídeo, sin recargarse y sin tocar el volumen del sistema. Un elemento `muted` en el manifest sigue en silencio: el volumen solo escala los vídeos con sonido.
+
 ## Vista previa
 
 Con `PREVIEW_START {intervalSec, maxWidth, quality}` el reproductor captura la pantalla cada `intervalSec` segundos con una sola llamada a Chromium (`Page.captureScreenshot` con `clip` y `scale`, sin screencast continuo) y envía `PREVIEW_FRAME {w, h, jpegBase64, at}` de como máximo 25 KB. No envía imágenes idénticas a la anterior salvo un latido cada 60 s, no captura durante una sesión de control remoto ni sin una petición activa, y se detiene con `PREVIEW_STOP` o si cae el WebSocket.

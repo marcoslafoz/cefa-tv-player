@@ -18,6 +18,7 @@ public class PlayerStatus {
   private final String version;
   private final String build;
   private volatile String idleLogo = "CEFA";
+  private volatile int volume = 100;
   private volatile PlayerPhase phase = PlayerPhase.STARTING;
   private volatile String message = "";
   private volatile String serverUrl = "";
@@ -82,6 +83,24 @@ public class PlayerStatus {
    */
   public String idleLogo() {
     return idleLogo;
+  }
+
+  /**
+   * Registra el volumen vigente de los vídeos.
+   *
+   * @param volume volumen de 0 a 100
+   */
+  public void volume(int volume) {
+    this.volume = volume;
+  }
+
+  /**
+   * Volumen vigente de los vídeos.
+   *
+   * @return volumen de 0 a 100
+   */
+  public int volume() {
+    return volume;
   }
 
   /**
@@ -337,6 +356,7 @@ public class PlayerStatus {
     map.put("version", version);
     map.put("build", build);
     map.put("idleLogo", idleLogo);
+    map.put("volume", volume);
     map.put("phase", phase.name());
     map.put("message", message);
     map.put("pairingCode", pairingCode);
